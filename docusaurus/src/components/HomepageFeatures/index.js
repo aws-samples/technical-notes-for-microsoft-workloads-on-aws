@@ -1,45 +1,89 @@
+import React from 'react';
 import clsx from 'clsx';
+import Link from '@docusaurus/Link';
 import Heading from '@theme/Heading';
 import styles from './styles.module.css';
 
 const FeatureList = [
   {
-    title: 'Easy to Use',
-    Svg: require('@site/static/img/undraw_docusaurus_mountain.svg').default,
+    title: 'Guides',
+    Svg: require('@site/static/img/guide.svg').default,
     description: (
       <>
-        Docusaurus was designed from the ground up to be easily installed and
-        used to get your website up and running quickly.
+        Guides were designed from the ground up to be easily followed and implemented, getting your cloud monitoring up and running quickly.
       </>
     ),
+    link: '/guides',
+  },
+  // {
+  //   title: 'Signals',
+  //   Svg: require('@site/static/img/signals.svg').default,
+  //   description: (
+  //     <>
+  //       Gain comprehensive insights into your AWS environment through key metrics, logs, and performance indicators.
+  //     </>
+  //   ),
+  //   link: '/signals/logs',
+  // },
+  // {
+  //   title: 'Tools',
+  //   Svg: require('@site/static/img/tools.svg').default,
+  //   description: (
+  //     <>
+  //      Streamline your AWS monitoring with purpose-built solutions for efficient data collection, analysis, and visualization.
+  //     </>
+  //   ),
+  //   link: '/tools/observability_accelerator',
+  // },
+  {
+    title: 'Recipes',
+    Svg: require('@site/static/img/recipes.svg').default,
+    description: (
+      <>
+        Implement proven AWS observability patterns to quickly solve common monitoring and troubleshooting challenges.
+      </>
+    ),
+    link: '/recipes',
   },
   {
-    title: 'Focus on What Matters',
-    Svg: require('@site/static/img/undraw_docusaurus_tree.svg').default,
+    title: 'FAQs',
+    Svg: require('@site/static/img/faq.svg').default,
     description: (
       <>
-        Docusaurus lets you focus on your docs, and we&apos;ll do the chores. Go
-        ahead and move your docs into the <code>docs</code> directory.
+        Find quick answers to common AWS observability questions, clarifying key concepts and best practices.
       </>
     ),
+    link: '/faq/general',
   },
-  {
-    title: 'Powered by React',
-    Svg: require('@site/static/img/undraw_docusaurus_react.svg').default,
-    description: (
-      <>
-        Extend or customize your website layout by reusing React. Docusaurus can
-        be extended while reusing the same header and footer.
-      </>
-    ),
-  },
+  // {
+  //   title: 'Patterns',
+  //   Svg: require('@site/static/img/patterns.svg').default,
+  //   description: (
+  //     <>
+  //       Learn step-by-step AWS observability implementation through comprehensive, easy-to-follow instructional resources.
+  //     </>
+  //   ),
+  //   link: '/patterns/Tracing/xrayec2',
+  // },
+  // {
+  //   title: 'CloudOps',
+  //   Svg: require('@site/static/img/cloudops.svg').default,
+  //   description: (
+  //     <>
+  //       Learn the AWS Cloud Operations Best Practices.
+  //     </>
+  //   ),
+  //   link: 'https://aws-samples.github.io/cloud-operations-best-practices/',
+  // },
 ];
 
-function Feature({Svg, title, description}) {
+function Feature({Svg, title, description, link}) {
   return (
     <div className={clsx('col col--4')}>
       <div className="text--center">
-        <Svg className={styles.featureSvg} role="img" />
+        <Link to={link}>
+          <Svg className={styles.featureSvg} role="img" />
+        </Link>
       </div>
       <div className="text--center padding-horiz--md">
         <Heading as="h3">{title}</Heading>

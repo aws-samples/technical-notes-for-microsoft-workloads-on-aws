@@ -92,12 +92,12 @@ const config = {
             position: 'left',
             label: 'Guides',
           },
-          {
-            type: 'doc',
-            docId: 'tools/index',
-            position: 'left',
-            label: 'Tools',
-          },
+          // {
+          //   type: 'doc',
+          //   docId: 'tools/index',
+          //   position: 'left',
+          //   label: 'Tools',
+          // },
           {
             type: 'doc',
             docId: 'recipes/index',
@@ -110,18 +110,18 @@ const config = {
             position: 'left',
             label: 'FAQ',
           },
-          {
-            type: 'doc',
-            docId: 'patterns/index',
-            position: 'left',
-            label: 'Patterns',
-          },
-          {
-            type: 'doc',
-            docId: 'resources/index',
-            position: 'left',
-            label: 'Resources',
-          },
+          // {
+          //   type: 'doc',
+          //   docId: 'patterns/index',
+          //   position: 'left',
+          //   label: 'Patterns',
+          // },
+          // {
+          //   type: 'doc',
+          //   docId: 'resources/index',
+          //   position: 'left',
+          //   label: 'Resources',
+          // },
           {
             type: 'doc',
             docId: 'contributors',
