@@ -1,0 +1,1 @@
+"use strict";(self.webpackChunktechnical_notes_for_microsoft_workloads_on_aws=self.webpackChunktechnical_notes_for_microsoft_workloads_on_aws||[]).push([[9858],{5516:o=>{o.exports=JSON.parse('{"name":"docusaurus-plugin-content-blog","id":"default"}')}}]);
