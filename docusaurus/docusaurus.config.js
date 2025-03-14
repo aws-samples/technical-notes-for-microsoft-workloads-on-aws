@@ -56,19 +56,19 @@ const config = {
     ],
   ],
 
-  plugins: [
+  // plugins: [
 
-    [
-      require.resolve("@easyops-cn/docusaurus-search-local"),
-      ({
-        //docsDir: "docs",
-        hashed: true,
-        indexPages: true,
-        language: ["en"],
-        indexBlog: false,
-      }),
-    ],
-  ],
+  //   [
+  //     require.resolve("@easyops-cn/docusaurus-search-local"),
+  //     ({
+  //       //docsDir: "docs",
+  //       hashed: true,
+  //       indexPages: true,
+  //       language: ["en"],
+  //       indexBlog: false,
+  //     }),
+  //   ],
+  // ],
 
   themeConfig:
     /** @type {import('@docusaurus/preset-classic').ThemeConfig} */
