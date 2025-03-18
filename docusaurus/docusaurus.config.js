@@ -15,15 +15,15 @@ const config = {
   favicon: 'img/favicon.ico',
 
   // Set the production url of your site here
-  url: 'https://aws-msft.github.io',
+  url: 'https://aws-samples.github.io',
   // Set the /<baseUrl>/ pathname under which your site is served
   // For GitHub pages deployment, it is often '/<projectName>/'
   baseUrl: '/technical-notes-for-microsoft-workloads-on-aws/',
 
   // GitHub pages deployment config.
   // If you aren't using GitHub pages, you don't need these.
-  organizationName: 'AWS', // Usually your GitHub org/user name.
-  projectName: 'Technical notes for Microsoft workloads on AWS', // Usually your repo name.
+  organizationName: 'aws-samples', // Usually your GitHub org/user name.
+  projectName: 'technical-notes-for-microsoft-workloads-on-aws', // Usually your repo name.
 
   onBrokenLinks: 'warn',
   onBrokenMarkdownLinks: 'warn',
