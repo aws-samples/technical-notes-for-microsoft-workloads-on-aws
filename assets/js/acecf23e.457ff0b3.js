@@ -1,0 +1,1 @@
+"use strict";(self.webpackChunktechnical_notes_for_microsoft_workloads_on_aws=self.webpackChunktechnical_notes_for_microsoft_workloads_on_aws||[]).push([[1903],{1912:o=>{o.exports=JSON.parse('{"blogBasePath":"/technical-notes-for-microsoft-workloads-on-aws/blog","blogTitle":"Blog","authorsListPath":"/technical-notes-for-microsoft-workloads-on-aws/blog/authors"}')}}]);
