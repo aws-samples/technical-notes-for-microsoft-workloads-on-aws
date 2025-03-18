@@ -44,6 +44,10 @@ jobs:
     # # Deploy to the github-pages environment
     # environment:
     #   name: github-pages
+
+
+
+    ## NOTE: Please look into "npm install aws-rum-web" for reporting and metrics
     
     steps:
       - uses: actions/checkout@v3
@@ -56,7 +60,7 @@ jobs:
       - name: Build
         run: |
           cd docusaurus
-          npm install aws-rum-web
+
           yarn install
           yarn build
       - uses: peaceiris/actions-gh-pages@v3
