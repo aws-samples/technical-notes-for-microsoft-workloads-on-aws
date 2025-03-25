@@ -89,50 +89,50 @@ const config = {
           },
           {
             type: 'doc',
-            docId: 'guides/index',
+            docId: 'DotNET/Guides/index',
             position: 'left',
-            label: 'Guides',
-          },
-          // {
-          //   type: 'doc',
-          //   docId: 'tools/index',
-          //   position: 'left',
-          //   label: 'Tools',
-          // },
-          {
-            type: 'doc',
-            docId: 'recipes/index',
-            position: 'left',
-            label: 'Recipes',
+            label: '.NET',
           },
           {
             type: 'doc',
-            docId: 'faq/index',
+            docId: 'Active-Directory/Guides/index',
             position: 'left',
-            label: 'FAQ',
+            label: 'Active Directory',
           },
-          // {
-          //   type: 'doc',
-          //   docId: 'patterns/index',
-          //   position: 'left',
-          //   label: 'Patterns',
-          // },
-          // {
-          //   type: 'doc',
-          //   docId: 'resources/index',
-          //   position: 'left',
-          //   label: 'Resources',
-          // },
           {
             type: 'doc',
-            docId: 'contributors',
+            docId: 'Windows-Containers/Guides/index',
             position: 'left',
-            label: 'Contributors',
+            label: 'Windows Containers',
           },
           {
-            type: 'localeDropdown',
-            position: 'right',
+            type: 'doc',
+            docId: 'SQL-Server/Guides/index',
+            position: 'left',
+            label: 'SQL Server',
           },
+          {
+            type: 'doc',
+            docId: 'EC2-Windows/Guides/index',
+            position: 'left',
+            label: 'EC2 Windows',
+          },
+          {
+            type: 'doc',
+            docId: 'Licensing/Guides/index',
+            position: 'left',
+            label: 'Licensing',
+          },
+          // {
+          //   type: 'doc',
+          //   docId: 'contributors',
+          //   position: 'left',
+          //   label: 'Contributors',
+          // },
+          // {
+          //   type: 'localeDropdown',
+          //   position: 'right',
+          // },
           {
             href: 'https://github.com/aws-samples/technical-notes-for-microsoft-workloads-on-aws',
             label: 'GitHub',
@@ -153,47 +153,6 @@ const config = {
       },
       footer: {
         style: 'dark',
-        links: [
-          {
-            title: 'Docs',
-            items: [
-              {
-                label: 'Tutorial',
-                to: '/docs/intro',
-              },
-            ],
-          },
-          {
-            title: 'Community',
-            items: [
-              {
-                label: 'Stack Overflow',
-                href: 'https://stackoverflow.com/questions/tagged/docusaurus',
-              },
-              {
-                label: 'Discord',
-                href: 'https://discordapp.com/invite/docusaurus',
-              },
-              {
-                label: 'X',
-                href: 'https://x.com/docusaurus',
-              },
-            ],
-          },
-          {
-            title: 'More',
-            items: [
-              {
-                label: 'Blog',
-                to: '/blog',
-              },
-              {
-                label: 'GitHub',
-                href: 'https://github.com/facebook/docusaurus',
-              },
-            ],
-          },
-        ],
         copyright: `Built with ❤️ at AWS. <br/> © ${new Date().getFullYear()}.  Amazon.com, Inc. or its affiliates. All Rights Reserved.`,
       },
       prism: {

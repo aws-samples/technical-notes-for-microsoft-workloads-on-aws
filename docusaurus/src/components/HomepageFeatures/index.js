@@ -6,65 +6,71 @@ import styles from './styles.module.css';
 
 const FeatureList = [
   {
-    title: 'Guides',
+    title: '.Net',
     Svg: require('@site/static/img/guide.svg').default,
     description: (
       <>
-        Guides were designed from the ground up to be easily followed and implemented, getting your cloud monitoring up and running quickly.
+        Learn how to host and maintain your .NET applications.
+        {/* Guides were designed from the ground up to be easily followed and implemented, getting your cloud monitoring up and running quickly. */}
       </>
     ),
-    link: '/guides',
+    link: '/DotNET',
   },
-  // {
-  //   title: 'Signals',
-  //   Svg: require('@site/static/img/signals.svg').default,
-  //   description: (
-  //     <>
-  //       Gain comprehensive insights into your AWS environment through key metrics, logs, and performance indicators.
-  //     </>
-  //   ),
-  //   link: '/signals/logs',
-  // },
-  // {
-  //   title: 'Tools',
-  //   Svg: require('@site/static/img/tools.svg').default,
-  //   description: (
-  //     <>
-  //      Streamline your AWS monitoring with purpose-built solutions for efficient data collection, analysis, and visualization.
-  //     </>
-  //   ),
-  //   link: '/tools/observability_accelerator',
-  // },
   {
-    title: 'Recipes',
+    title: 'Active Directory',
+    Svg: require('@site/static/img/signals.svg').default,
+    description: (
+      <>
+        AWS Active Directory environment in AWS.
+        {/* Gain comprehensive insights into your AWS environment through key metrics, logs, and performance indicators. */}
+      </>
+    ),
+    link: '/Active-Directory',
+  },
+  {
+    title: 'Windows Containers',
+    Svg: require('@site/static/img/tools.svg').default,
+    description: (
+      <>
+        AWS Windows Containers environment in AWS.
+       {/* Streamline your AWS monitoring with purpose-built solutions for efficient data collection, analysis, and visualization. */}
+      </>
+    ),
+    link: '/Windows-Containers',
+  },
+  {
+    title: 'SQL Server',
     Svg: require('@site/static/img/recipes.svg').default,
     description: (
       <>
-        Implement proven AWS observability patterns to quickly solve common monitoring and troubleshooting challenges.
+        SQL Server.
+        {/* Implement proven AWS observability patterns to quickly solve common monitoring and troubleshooting challenges. */}
       </>
     ),
-    link: '/recipes',
+    link: '/SQL-Server',
   },
   {
-    title: 'FAQs',
+    title: 'EC2 Windows',
     Svg: require('@site/static/img/faq.svg').default,
     description: (
       <>
-        Find quick answers to common AWS observability questions, clarifying key concepts and best practices.
+        EC2 Windows.
+        {/* Find quick answers to common AWS observability questions, clarifying key concepts and best practices. */}
       </>
     ),
-    link: '/faq/general',
+    link: '/EC2-Windows',
   },
-  // {
-  //   title: 'Patterns',
-  //   Svg: require('@site/static/img/patterns.svg').default,
-  //   description: (
-  //     <>
-  //       Learn step-by-step AWS observability implementation through comprehensive, easy-to-follow instructional resources.
-  //     </>
-  //   ),
-  //   link: '/patterns/Tracing/xrayec2',
-  // },
+  {
+    title: 'Licensing',
+    Svg: require('@site/static/img/patterns.svg').default,
+    description: (
+      <>
+        Licensing
+        {/* Learn step-by-step AWS observability implementation through comprehensive, easy-to-follow instructional resources. */}
+      </>
+    ),
+    link: '/Licensing',
+  },
   // {
   //   title: 'CloudOps',
   //   Svg: require('@site/static/img/cloudops.svg').default,

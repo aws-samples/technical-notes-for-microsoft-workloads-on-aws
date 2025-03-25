@@ -2,7 +2,7 @@
 sidebar_position: 1
 ---
 
-# What is MSFT
+# About the technical notes for Microsoft workload in AWS
 
 AWS MSFT helps customers take a step-by-step approach to operating more easily and efficiently in the cloud.
 
