@@ -6,7 +6,7 @@ import styles from './styles.module.css';
 
 const FeatureList = [
   {
-    title: '.Net',
+    title: '.NET',
     Svg: require('@site/static/img/guide.svg').default,
     description: (
       <>

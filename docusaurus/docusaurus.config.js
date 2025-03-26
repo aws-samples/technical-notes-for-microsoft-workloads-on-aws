@@ -10,7 +10,7 @@ import { themes as prismThemes } from 'prism-react-renderer';
 
 /** @type {import('@docusaurus/types').Config} */
 const config = {
-  title: 'Technical notes for Microsoft workloads on AWS',
+  title: 'Technical Notes for Microsoft Workloads on AWS',
   tagline: '🖥️ Improve Microsoft workloads on AWS 🚀',
   favicon: 'img/favicon.ico',
 
