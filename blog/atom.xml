@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://aws-samples.github.io/blog</id>
-    <title>Technical notes for Microsoft workloads on AWS Blog</title>
+    <title>Technical Notes for Microsoft Workloads on AWS Blog</title>
     <updated>2021-08-26T00:00:00.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://aws-samples.github.io/blog"/>
-    <subtitle>Technical notes for Microsoft workloads on AWS Blog</subtitle>
+    <subtitle>Technical Notes for Microsoft Workloads on AWS Blog</subtitle>
     <icon>https://aws-samples.github.io/img/favicon.ico</icon>
     <entry>
         <title type="html"><![CDATA[Welcome]]></title>
