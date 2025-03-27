@@ -75,7 +75,7 @@ const config = {
     /** @type {import('@docusaurus/preset-classic').ThemeConfig} */
     ({
       navbar: {
-        title: 'Technical notes for Microsoft workloads on AWS',
+        title: 'Technical Notes for Microsoft Workloads on AWS',
         logo: {
           alt: 'AWS Logo',
           src: 'img/logo.svg',
