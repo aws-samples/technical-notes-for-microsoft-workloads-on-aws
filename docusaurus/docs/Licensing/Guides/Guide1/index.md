@@ -4,6 +4,7 @@ sidebar_label: Collecting platform and billing details
 ---
 
 # Collecting platform and billing details for Microsoft licensing on AWS
+By Rob Higareda
 
 ## Introduction
 
