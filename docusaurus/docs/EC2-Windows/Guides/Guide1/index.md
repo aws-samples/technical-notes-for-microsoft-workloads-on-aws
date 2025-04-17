@@ -87,7 +87,6 @@ aws ec2 import-image --disk-containers Format=vhd,UserBucket="{S3Bucket=<bucket>
 ```
 Once the conversion is complete, launch a new instance from the AMI
 
-[IMAGE1]()
 ![IMAGE1](IMG/IMAGE01.png)
 
 There we go... Windows 2003...
@@ -99,7 +98,7 @@ I thought it would be prudent to go ahead and run the same migration test with M
 
 There are a few items to remember:
 
-- Microsoft Windows 2003 uses a special version of the AWS Replication agent that is only valid for legacy Windows OSs (AwsReplicationWindowsLegacyInstaller.exe).  That installation file will need to be pulled manually from: https://aws-application-migration-service-<region>.s3.amazonaws.com/latest/windows_legacy/AwsReplicationWindowsLegacyInstaller.exe
+- Microsoft Windows 2003 uses a special version of the AWS Replication agent that is only valid for legacy Windows OSs (AwsReplicationWindowsLegacyInstaller.exe).  That installation file will need to be pulled manually from: https://aws-application-migration-service-(region).s3.amazonaws.com/latest/windows_legacy/AwsReplicationWindowsLegacyInstaller.exe
      
 - Microsoft Windows 2003 (32-bit and 64-bit) requires .Net Framework version 3.5 to be installed by the end user
      
