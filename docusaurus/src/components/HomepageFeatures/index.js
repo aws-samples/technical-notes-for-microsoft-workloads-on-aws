@@ -6,8 +6,9 @@ import styles from './styles.module.css';
 
 const FeatureList = [
   {
+    scale: 0.9,
     title: '.NET',
-    Svg: require('@site/static/img/guide.svg').default,
+    Svg: require('@site/static/img/Res_Programming-Language_48_Light.svg').default,
     description: (
       <>
         Learn how to host and maintain your .NET applications.
@@ -17,8 +18,9 @@ const FeatureList = [
     link: '/DotNET',
   },
   {
+    scale: 0.8,
     title: 'Active Directory',
-    Svg: require('@site/static/img/signals.svg').default,
+    Svg: require('@site/static/img/Res_AWS-Directory-Service_AWS-Managed-Microsoft-AD_48.svg').default,
     description: (
       <>
         AWS Active Directory environment in AWS.
@@ -28,8 +30,9 @@ const FeatureList = [
     link: '/Active-Directory',
   },
   {
+    scale: 0.8,
     title: 'Windows Containers',
-    Svg: require('@site/static/img/tools.svg').default,
+    Svg: require('@site/static/img/Res_Amazon-Elastic-Container-Service_Container-2_48.svg').default,
     description: (
       <>
         AWS Windows Containers environment in AWS.
@@ -39,8 +42,9 @@ const FeatureList = [
     link: '/Windows-Containers',
   },
   {
+    scale: 0.7,
     title: 'SQL Server',
-    Svg: require('@site/static/img/recipes.svg').default,
+    Svg: require('@site/static/img/Res_Amazon-Aurora-SQL-Server-Instance_48.svg').default,
     description: (
       <>
         SQL Server.
@@ -50,8 +54,9 @@ const FeatureList = [
     link: '/SQL-Server',
   },
   {
+    scale: 0.7,
     title: 'EC2 Windows',
-    Svg: require('@site/static/img/faq.svg').default,
+    Svg: require('@site/static/img/Res_Amazon-EC2_Instance_48.svg').default,
     description: (
       <>
         EC2 Windows.
@@ -61,8 +66,9 @@ const FeatureList = [
     link: '/EC2-Windows',
   },
   {
+    scale: 0.6,
     title: 'Licensing',
-    Svg: require('@site/static/img/patterns.svg').default,
+    Svg: require('@site/static/img/Arch_AWS-License-Manager_64.svg').default,
     description: (
       <>
         Licensing
@@ -83,12 +89,12 @@ const FeatureList = [
   // },
 ];
 
-function Feature({Svg, title, description, link}) {
+function Feature({scale, Svg, title, description, link}) {
   return (
     <div className={clsx('col col--4')}>
       <div className="text--center">
         <Link to={link}>
-          <Svg className={styles.featureSvg} role="img" />
+          <Svg transform={"scale(" + scale + ")"} className={styles.featureSvg} role="img" />
         </Link>
       </div>
       <div className="text--center padding-horiz--md">
