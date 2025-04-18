@@ -1,5 +1,6 @@
 ---
 sidebar_position: 10
+sidebar_label: Amazon RDS for SQL Server with self-managed Active Directory
 ---
 
 # Scripted prerequisites check for integrating Amazon RDS for SQL Server with self-managed Active Directory
@@ -31,7 +32,7 @@ The following table identifies the role of each port.
 | TCP|636| Lightweight Directory Access Protocol over TLS/SSL (LDAPS)|
 | TCP|49152 - 65535 | Ephemeral ports for RPC|
 
-### INPUT
+## INPUT
 The following PowerShell script will verify the necessary network ports. For accuracy, run the script from a Windows instance located in the same VPC and subnet where you plan to deploy the RDS instance.
 
 The TCP test will tell you whether the port is open or closed.
@@ -90,7 +91,7 @@ foreach ($entry in $ports) {
 }
 ```
 
-### Active Directory Organisational Unit
+## Active Directory Organisational Unit
 
 The below PowerShell script can be used to validate that the OU they intend to use is valid. Run this script in a PowerShell session with the necessary permissions to read objects in Active Directory, and it will tell you whether the given OU exists or not.
 

@@ -2,10 +2,10 @@
 sidebar_position: 20
 ---
 
-# Optimising Directory Sharing in AWS Managed Microsoft AD
+# Optimizing Directory Sharing in AWS Managed Microsoft AD
 by Ben Groeneveld
 
-### Introduction
+## Introduction
 
 For many organisations using AWS services, enabling Windows / Kerberos authentication is a critical aspect of ensuring secure and efficient management. This process necessitates the use of AWS Managed Microsoft AD, a pivotal component for authentication purposes. Especially in environments where multiple AWS accounts are in play, organisations commonly leverage the Directory Sharing feature within AWS Managed Microsoft AD. This approach facilitates the extension of directory capabilities across numerous accounts, enhancing operational scalability and efficiency.
 
@@ -16,7 +16,7 @@ The following scenario illustrates a Financial Services Industry (FSI) customer 
 
 >Amazon RDS for SQL Server supports integration with a self-managed Active Directory, but this capability is limited exclusively to NTLM authentication.
 
-### Choosing the right AWS Managed Microsoft AD edition
+## Choosing the right AWS Managed Microsoft AD edition
 
 The customer realised that to enable Windows / Kerberos authentication for Amazon RDS, deploying AWS Managed Microsoft AD is a prerequisite. AWS Managed Microsoft AD offers two editions: Standard and Enterprise. The selection between these editions is crucial, particularly in scenarios involving directory sharing across a large number of accounts, as it significantly influences the overall cost. Therefore, making an informed choice of the appropriate edition is essential for cost-effective and efficient directory management.
 
@@ -43,7 +43,7 @@ It is also important to note the below [AWS Managed Microsoft AD quotas](https:/
 
 > If necessary, the above mentioned quotas can be raised by submitting a request through a support case.
 
-### Avoid indiscriminate deployment
+## Avoid indiscriminate deployment
 In certain customer environments, we have observed a tendency for indiscriminate deployment of directory sharing across all accounts. Often, this occurs due to a lack of awareness about the associated costs or in anticipation of future needs. However, such practices can lead to substantial unnecessary expenditure. It is advisable to adopt a more judicious approach to directory sharing, implementing it only when necessary. This strategy aids in minimising both costs and resource wastage.
 
 The list below details AWS applications and services that are compatible with a shared directory, and can be activated within an AWS account:"
@@ -59,7 +59,7 @@ The list below details AWS applications and services that are compatible with a 
 |Amazon RDS for PostgreSQL     |
 | Amazon RDS for SQL Server      |
 
-### Consolidate where possible
+## Consolidate where possible
 An effective strategy for cost optimisation in AWS Managed Microsoft AD involves consolidating workloads that require directory sharing. By centralising these workloads into fewer AWS accounts, organisations can significantly reduce the number of necessary directory shares. For instance, instead of spreading Amazon RDS database instances across multiple accounts, consolidating them into a single 'database account' can be more cost-efficient. This approach not only decreases the number of directory shares required but also simplifies management and oversight. It's important to assess the feasibility of such consolidation, considering factors like security, compliance, and performance requirements. By strategically grouping workloads that utilise the directory share, organisations can achieve a more streamlined, cost-effective AWS environment. This method directly addresses the challenge of managing multiple directory shares and their associated costs, offering a practical solution for organisations looking to optimize their AWS resource utilisation.
 
 The below image illustrates the customer's environment, where Amazon RDS database instances are deployed across every account. This setup requires a directory share in each account to facilitate Windows / Kerberos authentication. Consequently, each directory share incurs charges for every hour of operation.
@@ -70,7 +70,7 @@ To decrease their operational costs, the customer consolidated their Amazon RDS 
 
 ![IMAGE3](img/IMG-3.png)
 
-### Reduce the directory share operational hours
+## Reduce the directory share operational hours
 Customers exploring cost optimisation strategies for AWS Managed Microsoft AD often enquire about reducing the operational hours of their directory, rather than completely terminating the share. This approach can be particularly beneficial for services like Amazon EC2, where the flexibility of seamless domain-join allows for more dynamic management of directory usage. However, it's crucial to note that this method is not applicable to certain AWS managed services. For these services, the directory must be operational continuously to ensure uninterrupted service and functionality.
 
 | Application | 
@@ -98,7 +98,7 @@ Any enabled services will prevent the shared directory from being removed in the
 
 ![IMAGE6](img/IMG-6.png)
 
-### Leverage self-managed join procedure with Amazon FSx
+## Leverage self-managed join procedure with Amazon FSx
 Customers utilising Amazon FSx, including Amazon FSx for Windows File Server and Amazon FSx for NetApp ONTAP, often integrate these services with AWS Managed Microsoft AD across multiple accounts through directory sharing. This integration is crucial for enabling new directory-joined file systems to join the Active Directory domain. However, in large organisations with extensive AWS account structures, the costs associated with directory sharing for just provisioning Amazon FSx file systems can accumulate quickly.
 
 To mitigate these expenses while continuing to use AWS Managed Microsoft AD, customers can adopt the self-managed AD join process targeted at an AWS managed Microsoft AD. This approach eliminates the need to share the directory with each consumer or workload account, leading to potential significant cost savings. For successful implementation, it’s essential for customers to create a dedicated service account and delegate the necessary permissions within their Organisational Unit in AWS Managed Microsoft AD.
