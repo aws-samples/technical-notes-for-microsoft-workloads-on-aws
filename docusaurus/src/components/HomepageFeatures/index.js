@@ -11,7 +11,7 @@ const FeatureList = [
     Svg: require('@site/static/img/Res_Programming-Language_48_Light.svg').default,
     description: (
       <>
-        Learn how to host and maintain your .NET applications.
+        Learn how to host and maintain your .NET applications on AWS. See how AWS experts deploy and modernize .NET workloads on AWS.
         {/* Guides were designed from the ground up to be easily followed and implemented, getting your cloud monitoring up and running quickly. */}
       </>
     ),
@@ -23,7 +23,7 @@ const FeatureList = [
     Svg: require('@site/static/img/Res_AWS-Directory-Service_AWS-Managed-Microsoft-AD_48.svg').default,
     description: (
       <>
-        AWS Active Directory environment in AWS.
+        Explore Active Directory deployment patterns on AWS for seamless identity management, secure access, and centralized user management.
         {/* Gain comprehensive insights into your AWS environment through key metrics, logs, and performance indicators. */}
       </>
     ),
@@ -35,7 +35,7 @@ const FeatureList = [
     Svg: require('@site/static/img/Res_Amazon-Elastic-Container-Service_Container-2_48.svg').default,
     description: (
       <>
-        AWS Windows Containers environment in AWS.
+        Innovative techniques and strategies for deploying Windows containers on AWS container services including EKS, ECS and Fargate.
        {/* Streamline your AWS monitoring with purpose-built solutions for efficient data collection, analysis, and visualization. */}
       </>
     ),
@@ -47,7 +47,7 @@ const FeatureList = [
     Svg: require('@site/static/img/Res_Amazon-Aurora-SQL-Server-Instance_48.svg').default,
     description: (
       <>
-        SQL Server.
+        Useful insights from experts on effective strategies for running SQL Server on AWS, with practical tips and tricks to enhance performance and scale.
         {/* Implement proven AWS observability patterns to quickly solve common monitoring and troubleshooting challenges. */}
       </>
     ),
@@ -59,7 +59,7 @@ const FeatureList = [
     Svg: require('@site/static/img/Res_Amazon-EC2_Instance_48.svg').default,
     description: (
       <>
-        EC2 Windows.
+        Guidelines for effectively running Microsoft workloads on Amazon EC2, covering instance types, Image Builder, optimization, and autoscaling.
         {/* Find quick answers to common AWS observability questions, clarifying key concepts and best practices. */}
       </>
     ),
@@ -71,7 +71,7 @@ const FeatureList = [
     Svg: require('@site/static/img/Arch_AWS-License-Manager_64.svg').default,
     description: (
       <>
-        Licensing
+        Optimize Microsoft licensing and save cost when migrating of your Microsoft workloads to AWS. Find quick answers to common licensing questions.
         {/* Learn step-by-step AWS observability implementation through comprehensive, easy-to-follow instructional resources. */}
       </>
     ),

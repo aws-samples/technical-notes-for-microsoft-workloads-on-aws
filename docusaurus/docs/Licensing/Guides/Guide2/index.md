@@ -2,8 +2,8 @@
 sidebar_position: 10
 sidebar_label: License Mobility
 ---
-
 # License Mobility
+by Christine Megit
 
 Eligible Microsoft server applications can often be deployed on AWS using existing licenses. This allows you to more easily move your workloads to the Amazon Web Services cloud, without any additional Microsoft software licensing fees. This benefit is available to Microsoft Volume Licensing customers with eligible server applications covered by active Microsoft Software Assurance (SA) contracts. Not only will License Mobility make the transition easier for existing SA customers, it provides customers who prefer to purchase perpetual licenses the ability to continue doing so while still taking advantage of the efficiencies of [the cloud](https://aws.amazon.com/what-is-cloud-computing/). Keep in mind that when you choose to bring in your existing SQL Server licenses, you cannot utilize AMIs with SQL Server that you purchase from AWS through license-included instances. You must bring in your own licenses using your own software media.
 
