@@ -1,5 +1,6 @@
 ---
 sidebar_position: 10
+sidebar_label: Quickly deploy a self-managed AD Forest on Amazon EC2
 ---
 
 # Quickly deploy a self-managed AD Forest on Amazon EC2
