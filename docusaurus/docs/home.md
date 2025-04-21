@@ -2,23 +2,22 @@
 sidebar_position: 1
 ---
 
-# About the technical notes for Microsoft workload in AWS
+# About Technical Notes for Microsoft Workloads on AWS
 
-AWS MSFT helps customers take a step-by-step approach to operating more easily and efficiently in the cloud.
+This site is built for professionals who architect, deploy, and optimize Microsoft workloads in the AWS cloud. Here, seasoned AWS Solutions architects and experts share the architectures, guides, lessons learned, and insights they develop daily while helping customers build, migrate and modernize Microsoft technologies—such as Windows Server, SQL Server, Active Directory, .NET, and more—on AWS.
 
-MSFT will help identify 3 distinct phases of cloud adoption, and the use cases, services, and tools that organizations can use in each phase to build securely and successfully on the cloud.
+Dive into a curated library of real-world architectures and deployment patterns that address common challenges and showcase innovative solutions. Whether you’re migrating your legacy Windows applications, modernizing your infrastructure, or simply looking for guidance leveraging advanced AWS services for your Microsoft applications, you’ll find actionable guidance, proven best practices, and expert opinion grounded in hands-on experience.
 
-* Setup: Create a secure foundation for governance and compliance.
-* Build and Migrate: Migrate applications to the cloud, or develop and deploy new applications.
-* Operate: Monitor application performance, detect noncompliance or operational risks, and remediate issues quickly.
+Discover step-by-step guides for seamless migrations, performance tuning, security, and cost optimization strategies for Microsoft workloads on AWS. Explore detailed case studies that highlight successful customer outcomes, and gain valuable perspectives from AWS Solutions Architects and experts builders who regularly help customers navigate complex hybrid and multicloud implemenmtations.
 
-## What you will find here
+Whether you’re a cloud architect, system administrator, developer, or IT leader, this platform is your go-to resource for mastering Microsoft workloads' deployment on AWS.
 
-This site contains our best practices for MSFT: what do to, what not to do, and a collection of recipes on how to do them.
+This site is organized into six Microsoft technology domains:
 
-This site is organized into four categories:
-
-* Best practices guides on various services under MSFT.
-* Tools to streamline your AWS MSFT with purpose-built solutions.
-* Curated recipes to help you implement proven AWS MSFT patterns to quickly solve common challenges.
-* FAQs to help you find quick answers to common AWS MSFT questions, clarifying key concepts and best practices.
+* .NET
+* Active Directory
+* Windows Containers
+* SQL Server
+* EC2 Windows
+* Licensing
+  

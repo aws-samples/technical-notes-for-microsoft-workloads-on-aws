@@ -2,7 +2,6 @@
 sidebar_position: 10
 sidebar_label: Restrict IAM permission to specific Windows users for AWS Systems Manager
 ---
-
 # Restrict EC2 IAM role permission to specific Windows users for AWS Systems Manager. 
 by Siavash Irani
 

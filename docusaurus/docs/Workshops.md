@@ -20,19 +20,28 @@ sidebar_position: 900
 - [Here is the the complete list of .NET workshops](https://workshops.aws/card/.net)
 
 ## Active Directory
-Workshops for Active Directory can be found [here](https://workshops.aws/card/Active%20Directory)
+- [Active Directory on AWS Immersion Day](https://studio.us-east-1.prod.workshops.aws/workshops/public/b4a4be0e-d4f9-4ff5-af82-ebfb86dbe46a): A guide to deploying Active Directory (AD) on AWS, set up hybrid solutions, and set up Hybrid DNS. Security and compliance best practices for AD on AWS are also covered.
+- [Automate Active Directory Deployment on AWS](https://studio.us-east-1.prod.workshops.aws/workshops/public/802ddd98-940f-4e40-a9d1-2111a17e4dda): This Workshop covers the automated Active Directory Deployment on AWS via official Quickstart (that leverages CloudFormation & AWS System Manager) and Launch Wizard. Both modalities: Self-Managed and Managed Active Directory. As well, is covered the integration with additional Infra/DevOps AWS services to complement and boost a Well Architect Directory Services infrastructure, like Route 53 Resolver Endpoint, Amazon Image Builder and AWS CodeCommit (to be updated) services.
 
 ## Windows Containers
-Workshops for containers in AWS can be found [here](https://workshops.aws/card/Container)
+- [Windows Containers on AWS](https://studio.us-east-1.prod.workshops.aws/workshops/public/1de8014a-d598-4cb5-a119-801576492564): In this workshop, you will learn how to deploy and manage an Amazon EKS cluster for Windows containers, handling different Windows versions in the same cluster, setting up gMSA for Kerberos authentication on Windows containers, and persistent storage through EBS volumes.
+- Additional workshops for containers on AWS can be found [here](https://workshops.aws/card/Container)
 
 ## SQL
-Workshops for SQL can be found [here](https://workshops.aws/card/SQL)
+- [SQL Server Immersion Day](https://studio.us-east-1.prod.workshops.aws/workshops/public/f4734fd8-d4ca-4926-a211-ac57679acfb4): Learn how to migrate your SQL workloads to AWS, running on EC2 or managed environments. You will also learn about best practices for storage solutions for your SQL workloads on AWS, and modernizing your SQL server toward Amazon Aurora.
+- [Modernize your .NET and SQL Server to PostgreSQL database on AWS (with GenAI)](https://studio.us-east-1.prod.workshops.aws/workshops/public/b3ef1a83-6fd5-45d5-98f8-5351e7b070a0): Many of .NET applications use SQL Server as a backend database. In this workshop, learn how to migrate SQL Server to Amazon Aurora PostgreSQL and modernize .NET applications for PostgreSQL using AWS Generative AI services. By the end of this workshop, you will understand what refactoring is needed in both the application code and database and how AWS services help to overcome common challenges with scalable techniques and solutions using GenAI.
+- [SQL Server 2014 Upgrade Automation](https://studio.us-east-1.prod.workshops.aws/workshops/public/2e2b1385-1fa7-4b89-b55e-23d180c989eb): Upgrade SQL Server 2014 on EC2 instance using System Manager automation document
+- [Amazon RDS Custom for SQL Server](https://studio.us-east-1.prod.workshops.aws/workshops/public/e71186a2-d390-46b3-9eda-b8846644c1d7): In this workshop, we will explore and complete required steps before creating an Amazon RDS Custom for SQL Server instance.
+- Additional workshops for SQL can be found [here](https://workshops.aws/card/SQL)
 
 ## EC2 Windows
-Workshops for EC2 Windows can be found [here](https://workshops.aws/card/Windows)
+- [Securing Microsoft Windows Workloads on AWS](https://studio.us-east-1.prod.workshops.aws/workshops/public/3516e04e-8fe1-49b8-b967-e3c59fc9d216): AWS offers a number of service to help secure your Microsoft Workloads running in AWS. In this workshop we'll detail how you can leverage service like EC2 Image Builder, Amazon Inspector, AWS Config and more to help enable you to build a secure environment for your Windows workloads, while reducing your operational overhead. The AWS Firewall Manager Section cannot be run in an event, due to Workshop studio limits.
+- [Microsoft on AWS Cost Optimization](https://studio.us-east-1.prod.workshops.aws/workshops/public/68e818db-0db7-4448-8fb0-b6287918f84d): WWSO MSFT Specialist Solutions Architecture organization cost optimization workshop. We will dive deep into MSFT specific cost optimization techniques and scenarios, helping customers operationalize these techniques.
+- Additional workshops for EC2 Windows can be found [here](https://workshops.aws/card/Windows)
 
 ## Licensing
-Workshops for Licensing can be found [here](https://workshops.aws/card/License)
+- [Dedicated Host and License Manager Workshop](https://studio.us-east-1.prod.workshops.aws/workshops/public/c7d505a0-b48b-4178-922a-9ee675dfb81c)
+- Additional workshops for Licensing can be found [here](https://workshops.aws/card/License)
 
-## General Microsoft workload
-Workshops for Microsoft workload can be found [here](https://workshops.aws/card/microsoft)
+## General Microsoft workloads workshops
+Other workshops for Microsoft workloads can be found [here](https://workshops.aws/card/microsoft)
