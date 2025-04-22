@@ -5,6 +5,10 @@ sidebar_label: Restrict IAM permission to specific Windows users for AWS Systems
 # Restrict EC2 IAM role permission to specific Windows users for AWS Systems Manager. 
 by Siavash Irani
 
+<div align="center">
+<iframe width="560" height="315" src="https://www.youtube.com/watch?v=6hJKD4eeScA" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+</div>
+
 ## Background
 A customer in consulting segment wants to use AWS Systems manager session manager for managing their ec2 instances.
 
