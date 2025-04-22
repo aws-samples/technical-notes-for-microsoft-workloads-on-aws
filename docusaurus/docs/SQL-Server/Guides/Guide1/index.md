@@ -6,6 +6,8 @@ sidebar_label: Amazon RDS for SQL Server with self-managed Active Directory
 # Scripted prerequisites check for integrating Amazon RDS for SQL Server with self-managed Active Directory
 by Ben Groeneveld
 
+### Introduction
+
 For customers aiming to deploy RDS for SQL Server and integrate it with a self-managed Active Directory for Windows Authentication, it's crucial to ensure that all key prerequisites are met before initiating the provisioning of the RDS instance.
 
 To make things easier, I have created the following scripts that can assist with this validation as well as assist with troubleshooting efforts for customers who are running into issues during deployment.

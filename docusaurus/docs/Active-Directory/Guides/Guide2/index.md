@@ -7,12 +7,12 @@ by Ben Groeneveld
 
 ## Introduction
 
-For many organisations using AWS services, enabling Windows / Kerberos authentication is a critical aspect of ensuring secure and efficient management. This process necessitates the use of AWS Managed Microsoft AD, a pivotal component for authentication purposes. Especially in environments where multiple AWS accounts are in play, organisations commonly leverage the Directory Sharing feature within AWS Managed Microsoft AD. This approach facilitates the extension of directory capabilities across numerous accounts, enhancing operational scalability and efficiency.
+For many organisations using AWS services, enabling Windows / Kerberos authentication is a critical aspect of ensuring secure and efficient management. This process necessitates the use of AWS Directory Service for Microsoft Active Directory (AWS Managed Microsoft AD), a pivotal component for authentication purposes. Especially in environments where multiple AWS accounts are in play, organisations commonly leverage the [Directory Sharing](https://docs.aws.amazon.com/directoryservice/latest/admin-guide/ms_ad_directory_sharing.html) feature within AWS Managed Microsoft AD. This approach facilitates the extension of directory capabilities across numerous accounts, enhancing operational scalability and efficiency.
 
 However, this scalability comes with its own set of challenges, especially for large organisations managing hundreds or even thousands of accounts. The cost implications of Directory Sharing, which are incurred on a per-hour and per-account basis, can be significantly high at such scales, prompting organisations to seek cost-optimisation strategies.
 
 ## Our Scenario
-The following scenario illustrates a Financial Services Industry (FSI) customer located in Singapore. This customer exclusively operates within the Singapore region and has no plans for regional expansion. Their AWS footprint encompasses 500 accounts, each requiring the deployment of Amazon RDS database instances. These instances include a mix of PostgreSQL and Microsoft SQL Server. Importantly, their cybersecurity team mandates the use of Active Directory authentication for all services, aligning with stringent security protocols.
+The following scenario illustrates a Financial Services Industry (FSI) customer located in Singapore. This customer exclusively operates within the Singapore region and has no plans for regional expansion. Their AWS footprint encompasses 500 accounts, each requiring the deployment of Amazon Relational Database Service (Amazon RDS) database instances. These instances include a mix of Amazon RDS for PostgreSQL and Microsoft SQL Server. Importantly, their cybersecurity team mandates the use of Active Directory authentication for all services, aligning with stringent security protocols.
 
 >Amazon RDS for SQL Server supports integration with a self-managed Active Directory, but this capability is limited exclusively to NTLM authentication.
 
@@ -31,7 +31,7 @@ The below shows the potential cost implications of not choosing the appropriate 
 | Number of accounts | 500  | 500 |
 | Hourly Price (per additional account to which the directory is shared)| $0.0213|$0.0744|
 | Monthly price|$7,668 | $26,784|
-| Annual price|$92,016	 | $321,408|
+| Annual price|$92,016| $321,408|
 
 It is also important to note the below [AWS Managed Microsoft AD quotas](https://docs.aws.amazon.com/directoryservice/latest/admin-guide/ms_ad_limits.html) for Shared domains per Microsoft AD. The shared domain default quota refers to the number of accounts that an individual directory can be shared to.
 

@@ -6,6 +6,8 @@ sidebar_position: 20
 # Windows Server 2003 Migration to Amazon EC2
 by Michael Spence
 
+
+### Introduction
 I recently had a colleague ask me about migration of a Microsoft Windows Server 2003 virtual machine.  I spent ... so ... many years staring at that UI, I almost felt nostalgic in a way to see if it could still be done. As of the time of writing, Windows Server 2003 is listed as a supported operating system for AWS MGN and it is possible to use VM import to convert the machine from VMware or Hyper-V to EC2.  I thought I would document both approaches below.
 
 ### AWS VM Import
