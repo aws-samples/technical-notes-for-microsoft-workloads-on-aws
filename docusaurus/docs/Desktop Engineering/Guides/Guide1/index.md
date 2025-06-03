@@ -4,7 +4,7 @@ sidebar_label: Windows LAPS & AWS Microsoft Managed Active Directory
 ---
 
 # Windows LAPS & AWS Microsoft Managed Active Directory
-by Luciano Bernardes
+by Luciano Bernardes and Sassan Hajrasooliha
 
 ### Introduction
 [Windows Local Administrator Password Solution](https://learn.microsoft.com/en-us/windows-server/identity/laps/laps-overview) (Windows LAPS) is a Windows feature that automatically manages and backs up the password of a local administrator account on your Microsoft Entra joined or Windows Server Active Directory-joined devices. You can also use Windows LAPS to automatically manage and back up the Directory Services Restore Mode (DSRM) account password on your Windows Server Active Directory domain controllers (DCs). An authorized administrator can retrieve the DSRM password and use it.
