@@ -25,6 +25,7 @@ Regarding OS level support, the solution covers Windows Server 2019, 2022, and 2
 Having Active Directory as the LAPS password repository and aiming to enable the enhanced features, Windows LAPS requires Domain Functional Level 2016 and domain controllers running on Windows Server 2019 or newer (Image 1). More information [here](https://learn.microsoft.com/en-us/windows-server/identity/laps/laps-scenarios-windows-server-active-directory#domain-functional-level-and-domain-controller-os-version-requirements).
 
 ![IMAGE1](IMG/IMG-1.png)
+
 _Image 1 - Table summarizing the supported-or-not scenarios ([from Microsoft docs](https://learn.microsoft.com/en-us/windows-server/identity/laps/laps-scenarios-windows-server-active-directory#domain-functional-level-and-domain-controller-os-version-requirements))_
 
 AWS Managed AD currently runs under the Domain and Forest Functional Level 2012 R2 and the domain controllers run on Windows Server 2019. Consequently, the enhanced features are not supported by AWS Managed AD. Check the [Getting started with AWS Managed Microsoft AD](https://docs.aws.amazon.com/directoryservice/latest/admin-guide/ms_ad_getting_started.html) documentation to know more.
