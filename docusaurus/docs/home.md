@@ -12,7 +12,7 @@ Discover step-by-step guides for seamless migrations, performance tuning, securi
 
 Whether you’re a cloud architect, system administrator, developer, or IT leader, this platform is your go-to resource for mastering Microsoft workloads' deployment on AWS.
 
-This site is organized into six Microsoft technology domains:
+This site is organized into seven Microsoft technology domains:
 
 * .NET
 * Active Directory
@@ -20,4 +20,4 @@ This site is organized into six Microsoft technology domains:
 * SQL Server
 * EC2 Windows
 * Licensing
-  
+* Desktop Engineering
