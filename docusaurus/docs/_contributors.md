@@ -13,6 +13,11 @@ people:
 | ------------------- | --------------------------- | ----------------- | ------------------ |
 | Ali Alzand          | Tekena Orugbani             | Siavash Irani     |                    |
 
+| Contributors        |
+| ------------------- |
+| Luciano Bernardes   |
+| Sassan Hajrasooliha |
+
 Note that all recipes published on this site are available via the
 [MIT-0][mit0] license, a modification to the usual MIT license
 that removes the requirement for attribution.
