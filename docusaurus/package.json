@@ -50,7 +50,7 @@
     "cssnano": "^7.0.7",
     "cssnano-preset-default": "^7.0.7",
     "cssnano-util-raw-cache": "^4.0.1",
-    "download": "^2.0.0",
+    "download": "^8.0.0",
     "execa": "^9.6.0",
     "fast-glob": "^3.3.3",
     "find-versions": "^6.0.0",
