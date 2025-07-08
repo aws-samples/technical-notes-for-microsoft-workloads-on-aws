@@ -119,7 +119,7 @@
   "devDependencies": {
     "@docusaurus/module-type-aliases": "^3.8.1",
     "@docusaurus/types": "^3.8.1",
-    "docusaurus": "^1.3.2"
+    "docusaurus": "^1.14.7"
   },
   "browserslist": {
     "production": [
