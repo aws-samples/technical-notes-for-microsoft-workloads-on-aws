@@ -15,7 +15,7 @@ const FeatureList = [
         {/* Guides were designed from the ground up to be easily followed and implemented, getting your cloud monitoring up and running quickly. */}
       </>
     ),
-    link: '/DotNET',
+    link: '/DotNET/Guides/',
   },
   {
     scale: 0.8,
@@ -27,7 +27,7 @@ const FeatureList = [
         {/* Gain comprehensive insights into your AWS environment through key metrics, logs, and performance indicators. */}
       </>
     ),
-    link: '/Active-Directory',
+    link: '/Active-Directory/Guides/',
   },
   {
     scale: 0.8,
@@ -39,7 +39,7 @@ const FeatureList = [
        {/* Streamline your AWS monitoring with purpose-built solutions for efficient data collection, analysis, and visualization. */}
       </>
     ),
-    link: '/Windows-Containers',
+    link: '/Windows-Containers/Guides/',
   },
   {
     scale: 0.7,
@@ -51,7 +51,7 @@ const FeatureList = [
         {/* Implement proven AWS observability patterns to quickly solve common monitoring and troubleshooting challenges. */}
       </>
     ),
-    link: '/SQL-Server',
+    link: '/SQL-Server/Guides/',
   },
   {
     scale: 0.7,
@@ -63,7 +63,7 @@ const FeatureList = [
         {/* Find quick answers to common AWS observability questions, clarifying key concepts and best practices. */}
       </>
     ),
-    link: '/EC2-Windows',
+    link: '/EC2-Windows/Guides/',
   },
   {
     scale: 0.6,
@@ -75,7 +75,7 @@ const FeatureList = [
         {/* Learn step-by-step AWS observability implementation through comprehensive, easy-to-follow instructional resources. */}
       </>
     ),
-    link: '/Licensing',
+    link: '/Licensing/Guides/',
   },
   // {
   //   title: 'CloudOps',
