@@ -38,17 +38,27 @@ In order to make the appropriate license conversions, you must first understand 
 |SQL Server Standard |RunInstances:0004|
 |SQL Server Web|RunInstances:0200|
 
-It's important to get an inventory of your environment to help understand the appropriate billing code changes which will be necessary for each EC2 instance. The following command can be run from the AWS CLI to see details about each EC2 instance, their current billing codes, and tenancy.
+It's important to get an inventory of your environment to help understand the appropriate billing code changes which will be necessary for each EC2 instance. The following command can be run using AWS CLI or PowerShell to see details about each EC2 instance, their current billing codes, and tenancy.
 
 *Note the sample command is specific to the us-east-2 region. Edit the region to see EC2 instances in each location.*
 
+**AWS CLI**
 ```
 aws ec2 describe-instances --region us-east-2 --query 'Reservations[*].Instances[*].{Instance:InstanceId,Platform:PlatformDetails,UsageOperation:UsageOperation,Size:InstanceType,Status:State.Name,Tenancy:Placement.Tenancy}' --output table
 ```
 
-
-
 ![](img/SPLA_1.png)
+
+**PowerShell**
+```
+(Get-EC2Instance -Region us-east-2).Instances | 
+Format-Table @{Name='Instance';Expression={$_.InstanceId}}, 
+             @{Name='Platform';Expression={$_.PlatformDetails}}, 
+             @{Name='UsageOperation';Expression={$_.UsageOperation}}, 
+             @{Name='Size';Expression={$_.InstanceType}}, 
+             @{Name='Status';Expression={$_.State.Name}}, 
+             @{Name='Tenancy';Expression={$_.Placement.Tenancy}}
+```
 
 In this example, we can see the `Usage Operation` is listed as `RunInstances:0800`, meaning these EC2 instance are customer images which are not using AWS provided licenses. By changing each EC2 instance's billing code to ``RunInstances:0002``, it will begin charging for the Windows Server license as part of the EC2 instance cost. If you're using both Windows Server and SQL Server on the same EC2 instance, you'll need to use the appropriate Usage Operation billing code to account for both licenses.
 
@@ -105,13 +115,21 @@ Now that the license conversions have been successfully applied, you can focus o
 
 ![](img/SPLA_11.png)
 
-Unlike the license conversion, the process to change the EC2 tenancy can only be done through the AWS CLI. Use the following command for each EC2 instance to change the tenancy to `default`.
+Unlike the license conversion, the process to change the EC2 tenancy can only be done through commands usings AWS CLI or PowerShell. Use the following command for each EC2 instance to change the tenancy to `default`.
 
+**AWS CLI**
 ```
 aws ec2 modify-instance-placement --instance-id <instance_id> --tenancy default
 ```
 
 ![](img/SPLA_9.png)
+
+**PowerShell**
+```
+Edit-EC2InstancePlacement `
+    -InstanceId <instance_id> `
+    -Tenancy default
+```
 
 Once all your tenancy conversions are complete, review your EC2 inventory again to verify all resources are using the correct billing codes and display `default` tenancy. 
 
