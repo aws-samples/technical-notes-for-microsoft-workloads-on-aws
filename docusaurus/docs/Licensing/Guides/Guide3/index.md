@@ -92,30 +92,94 @@ If you prefer the AWS CLI, the following examples can be used for converting BYO
 
 #### Convert Windows Server from BYOL to license included
 
+<Tabs
+    groupId="cmtool"
+    defaultValue="AWS CLI"
+    values={[
+        {label: 'AWS CLI', value: 'AWS CLI'},
+        {label: 'PowerShell', value: 'PowerShell'},
+    ]}>
+<TabItem value="AWS CLI">
+
 ```
 aws license-manager create-license-conversion-task-for-resource \
 	--resource-arn <instance_arn> \
 	--source-license-context UsageOperation=RunInstances:0800 \
 	--destination-license-context UsageOperation=RunInstances:0002
 ```
+</TabItem>
+<TabItem value="PowerShell">
+
+```
+New-LICMLicenseConversionTaskForResource `
+    -ResourceArn '<instance_arn>' `
+    -SourceLicenseContext_UsageOperation 'RunInstances:0800' `
+    -DestinationLicenseContext_UsageOperation 'RunInstances:0002'
+```
+
+</TabItem>
+</Tabs>
+
 
 #### Convert both Windows Server and SQL Server Standard from BYOL to license included
 
+<Tabs
+    groupId="cmtool"
+    defaultValue="AWS CLI"
+    values={[
+        {label: 'AWS CLI', value: 'AWS CLI'},
+        {label: 'PowerShell', value: 'PowerShell'},
+    ]}>
+<TabItem value="AWS CLI">
 ```
 aws license-manager create-license-conversion-task-for-resource \
 	--resource-arn <instance_arn> \
 	--source-license-context UsageOperation=RunInstances:0800 \
 	--destination-license-context UsageOperation=RunInstances:0006
 ```
+</TabItem>
+
+<TabItem value="PowerShell">
+
+```
+New-LICMLicenseConversionTaskForResource `
+    -ResourceArn '<instance_arn>' `
+    -SourceLicenseContext_UsageOperation 'RunInstances:0800' `
+    -DestinationLicenseContext_UsageOperation 'RunInstances:0006'
+```
+
+</TabItem>
+</Tabs>
 
 #### Convert both Windows Server and SQL Server Enterprise from BYOL to license included
 
+<Tabs
+    groupId="cmtool"
+    defaultValue="AWS CLI"
+    values={[
+        {label: 'AWS CLI', value: 'AWS CLI'},
+        {label: 'PowerShell', value: 'PowerShell'},
+    ]}>
+<TabItem value="AWS CLI">
 ```
 aws license-manager create-license-conversion-task-for-resource \
 	--resource-arn <instance_arn> \
 	--source-license-context UsageOperation=RunInstances:0800 \
 	--destination-license-context UsageOperation=RunInstances:0102
 ```
+</TabItem>
+<TabItem value="PowerShell">
+
+```
+New-LICMLicenseConversionTaskForResource `
+    -ResourceArn '<instance_arn>' `
+    -SourceLicenseContext_UsageOperation 'RunInstances:0800' `
+    -DestinationLicenseContext_UsageOperation 'RunInstances:0102'
+```
+
+</TabItem>
+</Tabs>
+
 
 ![](img/SPLA_5.png)
 
