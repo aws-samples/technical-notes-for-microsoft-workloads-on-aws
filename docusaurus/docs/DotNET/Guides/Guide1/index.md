@@ -73,6 +73,11 @@ Description: 'Parameter Store API Usage Monitoring - 1 Minute Resolution'
 Resources:
   MonitoringLambdaRole:
     Type: 'AWS::IAM::Role'
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W11
+            reason: "The API call is to describe and it does not allow resource level permissions"
     Properties:
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
@@ -102,11 +107,17 @@ Resources:
 
   MonitoringLambda:
     Type: AWS::Lambda::Function
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: "This Lambda function is independent of VPC and does not require to run inside a VPC"
     Properties:
       Handler: index.lambda_handler
       Role: !GetAtt MonitoringLambdaRole.Arn
       Runtime: python3.9
       Timeout: 300
+      ReservedConcurrentExecutions: 10
       Code:
         ZipFile: |
           import boto3
@@ -117,12 +128,12 @@ Resources:
           def lambda_handler(event, context):
               cloudwatch = boto3.client('cloudwatch')
               cloudtrail = boto3.client('cloudtrail')
-
+              
               # Get events from 6 minutes ago to 5 minutes ago
               # This ensures we capture all events with CloudTrail's latency
               end_time = datetime.utcnow() - timedelta(minutes=5)
               start_time = end_time - timedelta(minutes=1)
-
+              
               try:
                   # Look up CloudTrail events for Parameter Store API calls
                   response = cloudtrail.lookup_events(
@@ -135,23 +146,23 @@ Resources:
                       StartTime=start_time,
                       EndTime=end_time
                   )
-
+                  
                   # Initialize counters
                   get_parameter_count = 0
                   get_parameters_count = 0
                   error_count = 0
-
+                  
                   # Process events
                   for event in response['Events']:
                       event_name = event['EventName']
                       event_time = event['EventTime']
-
+                      
                       # Parse CloudTrail event
                       if event_name == 'GetParameter':
                           get_parameter_count += 1
                       elif event_name == 'GetParameters':
                           get_parameters_count += 1
-
+                          
                       # Check for errors in the response elements
                       try:
                           event_response = event.get('ResponseElements', {})
@@ -159,11 +170,11 @@ Resources:
                               error_count += 1
                       except:
                           pass
-
+                  
                   # Get account and region information
-                  account_id = context.invoked_function_arn.split[':'](4)
+                  account_id = context.invoked_function_arn.split(':')[4]
                   region = os.environ['AWS_REGION']
-
+                  
                   # Publish metrics to CloudWatch with the end_time timestamp
                   # This ensures metrics align with the actual time the events occurred
                   cloudwatch.put_metric_data(
@@ -219,14 +230,14 @@ Resources:
                           }
                       ]
                   )
-
+                  
                   return {
                       'statusCode': 200,
                       'body': f'Metrics published successfully for period ending {end_time.isoformat()}. ' \
                              f'GetParameter: {get_parameter_count}, GetParameters: {get_parameters_count}, ' \
                              f'Errors: {error_count}'
                   }
-
+                  
               except Exception as e:
                   print(f"Error: {str(e)}")
                   raise
@@ -294,11 +305,10 @@ Resources:
             }
           ]
         }
-
+        
   HighUsageAlarm:
     Type: 'AWS::CloudWatch::Alarm'
     Properties:
-      AlarmName: 'ParameterStore-HighAPIUsage'
       AlarmDescription: 'Alert when Parameter Store API usage is high'
       MetricName: 'GetParameterCalls'
       Namespace: 'Custom/ParameterStore'
