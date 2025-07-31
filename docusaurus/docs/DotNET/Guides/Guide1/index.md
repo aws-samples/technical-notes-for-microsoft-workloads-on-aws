@@ -1,9 +1,9 @@
 ---
 sidebar_position: 10
-sidebar_label: Monitoring SSM Parameter Store API usage for .NET configurations
+sidebar_label: Monitoring SSM Parameter Store API usage for .NET applications
 ---
 
-# Monitoring SSM Parameter Store API usage for .NET configurations
+# Monitoring SSM Parameter Store API usage for .NET applications
 by Suhail Fouzan
 
 ### Introduction
