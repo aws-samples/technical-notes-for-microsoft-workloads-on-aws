@@ -1,5 +1,6 @@
 ---
 sidebar_position: 10
+sidebar_label: Monitoring SSM Parameter Store API usage for .NET configurations
 ---
 
 # Monitoring SSM Parameter Store API usage for .NET configurations
@@ -55,15 +56,17 @@ This solution uses approximately:
 - 43,200 invocations/month (30-day month)
 - ~4.32% of the monthly free tier (1 million free requests per month)
 
-Use the Cloudformation template below to deploy the solution:
+### Additional optimization options
 
-<pre style="max-height:700px; overflow:auto;">
-<code>
+Example: More frequent during business hours
+
 ```
 ScheduleExpression: 'cron(0/1 8-18 ? * MON-FRI *)'
 ```
 
-## CFN for Deployment:
+Use the Cloudformation template below to deploy the solution:
+
+## CFN for Deployment
 
 ```yaml
 AWSTemplateFormatVersion: '2010-09-09'
@@ -116,12 +119,12 @@ Resources:
           def lambda_handler(event, context):
               cloudwatch = boto3.client('cloudwatch')
               cloudtrail = boto3.client('cloudtrail')
-              
+
               # Get events from 6 minutes ago to 5 minutes ago
               # This ensures we capture all events with CloudTrail's latency
               end_time = datetime.utcnow() - timedelta(minutes=5)
               start_time = end_time - timedelta(minutes=1)
-              
+
               try:
                   # Look up CloudTrail events for Parameter Store API calls
                   response = cloudtrail.lookup_events(
@@ -134,23 +137,23 @@ Resources:
                       StartTime=start_time,
                       EndTime=end_time
                   )
-                  
+
                   # Initialize counters
                   get_parameter_count = 0
                   get_parameters_count = 0
                   error_count = 0
-                  
+
                   # Process events
                   for event in response['Events']:
                       event_name = event['EventName']
                       event_time = event['EventTime']
-                      
+
                       # Parse CloudTrail event
                       if event_name == 'GetParameter':
                           get_parameter_count += 1
                       elif event_name == 'GetParameters':
                           get_parameters_count += 1
-                          
+
                       # Check for errors in the response elements
                       try:
                           event_response = event.get('ResponseElements', {})
@@ -158,11 +161,11 @@ Resources:
                               error_count += 1
                       except:
                           pass
-                  
+
                   # Get account and region information
-                  account_id = context.invoked_function_arn.split(':')[4]
+                  account_id = context.invoked_function_arn.split[':'](4)
                   region = os.environ['AWS_REGION']
-                  
+
                   # Publish metrics to CloudWatch with the end_time timestamp
                   # This ensures metrics align with the actual time the events occurred
                   cloudwatch.put_metric_data(
@@ -218,14 +221,14 @@ Resources:
                           }
                       ]
                   )
-                  
+
                   return {
                       'statusCode': 200,
                       'body': f'Metrics published successfully for period ending {end_time.isoformat()}. ' \
                              f'GetParameter: {get_parameter_count}, GetParameters: {get_parameters_count}, ' \
                              f'Errors: {error_count}'
                   }
-                  
+
               except Exception as e:
                   print(f"Error: {str(e)}")
                   raise
@@ -293,7 +296,7 @@ Resources:
             }
           ]
         }
-        
+
   HighUsageAlarm:
     Type: 'AWS::CloudWatch::Alarm'
     Properties:
@@ -313,7 +316,3 @@ Resources:
       ComparisonOperator: 'GreaterThanThreshold'
       TreatMissingData: 'notBreaching'
 ```
-
-## Output CW Dashboard:
-</code>
-</pre>
