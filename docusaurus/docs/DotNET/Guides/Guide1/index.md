@@ -4,9 +4,9 @@ sidebar_label: Monitoring SSM Parameter Store API usage for .NET configurations
 ---
 
 # Monitoring SSM Parameter Store API usage for .NET configurations
-
 by Suhail Fouzan
 
+### Introduction
 Modern cloud-native .NET applications require robust, secure, and scalable configuration management. AWS Systems Manager Parameter Store offers a centralized, secure solution for storing and managing application configurations, eliminating hard-coded credentials and providing dynamic configuration capabilities. This article explores a solution to implement a comprehensive SSM Parameter store APIs monitoring strategy for developers using Parameter Store for centralized .NET application configuration.
 
 By storing configuration parameters in AWS Systems Manager Parameter Store, .NET applications gain several critical advantages:
@@ -34,14 +34,14 @@ Through a serverless monitoring approach using AWS Lambda and CloudWatch, develo
 
 The solution demonstrates how strategic monitoring can transform configuration management from a potential point of failure into a robust, transparent operational process for .NET applications running in cloud environments.
 
-## Key Components
+### Key Components
 
 - **Data Collection**: AWS Lambda function querying CloudTrail events
 - **Metrics**: Custom CloudWatch metrics with 1-minute granularity
 - **Visualization**: Near Real-time CloudWatch dashboard
 - **Alerting**: Configurable CloudWatch alarms
 
-## Technical Specifications
+### Technical Specifications
 
 - **Resolution**: 1-minute intervals
 - **Latency**: 5-minute intentional delay to allow CloudTrail latency
@@ -63,10 +63,8 @@ Example: More frequent during business hours
 ```
 ScheduleExpression: 'cron(0/1 8-18 ? * MON-FRI *)'
 ```
-
+### Cloudformation template for deployment
 Use the Cloudformation template below to deploy the solution:
-
-## CFN for Deployment
 
 ```yaml
 AWSTemplateFormatVersion: '2010-09-09'
