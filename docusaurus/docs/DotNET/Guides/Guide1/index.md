@@ -59,10 +59,16 @@ This solution uses approximately:
 ### Additional optimization options
 
 Example: More frequent during business hours
-
 ```
 ScheduleExpression: 'cron(0/1 8-18 ? * MON-FRI *)'
 ```
+
+### Output dashboard
+
+![IMAGE1](IMG/Parameter_store_api_monitoring1.png)
+![IMAGE1](IMG/Parameter_store_api_monitoring2.png)
+![IMAGE1](IMG/Parameter_store_api_monitoring3.png)
+
 ### Cloudformation template for deployment
 Use the Cloudformation template below to deploy the solution:
 
