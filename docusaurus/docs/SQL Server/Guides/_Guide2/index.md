@@ -5,14 +5,14 @@ sidebar_label: Automate SQL backup using snapshots on Amazon FSx for ONTAP
 
 # Amazon FSx for ONTAP: SQL Server Snapshot-Based Backup Automation Script
 
-[This PowerShell script](https://github.com/aws-samples/technical-notes-for-microsoft-workloads-on-aws/tree/main/docusaurus/docs/SQL-Server/Guides/Guide2/Scripts/TSQL_Backup.ps1) will automate the T-SQL backup flow utilizing snapshots on Amazon FSx for ONTAP filesystem and TSQL suspend and metadata backup. This will replace the
+[This PowerShell script](https://github.com/aws-samples/technical-notes-for-microsoft-workloads-on-aws/tree/main/docusaurus/docs/SQL Server/Guides/Guide2/Scripts/TSQL_Backup.ps1) will automate the T-SQL backup flow utilizing snapshots on Amazon FSx for ONTAP filesystem and TSQL suspend and metadata backup. This will replace the
 full and incremental backups of SQL. Recommended to run every 6hrs or at desired frequency. Transaction log backups would continue in the traditional way more frequently at 15min or lesser as needed.
 
-[The PowerShell script](https://github.com/aws-samples/technical-notes-for-microsoft-workloads-on-aws/tree/main/docusaurus/docs/SQL-Server/Guides/Guide2/Scripts/TSQL_Backup.ps1) fetches the disks assigned to SQL instance/databases and maps that back to LUN and volume on Amazon FSx for ONTAP. You can run at the required schedule using SQL agent or Windows scheduler.
+[The PowerShell script](https://github.com/aws-samples/technical-notes-for-microsoft-workloads-on-aws/tree/main/docusaurus/docs/SQL Server/Guides/Guide2/Scripts/TSQL_Backup.ps1) fetches the disks assigned to SQL instance/databases and maps that back to LUN and volume on Amazon FSx for ONTAP. You can run at the required schedule using SQL agent or Windows scheduler.
 
 # Script Location
 
-Get the script here: [TSQL_Backup.ps1](https://github.com/aws-samples/technical-notes-for-microsoft-workloads-on-aws/tree/main/docusaurus/docs/SQL-Server/Guides/Guide2/Scripts/TSQL_Backup.ps1)
+Get the script here: [TSQL_Backup.ps1](https://github.com/aws-samples/technical-notes-for-microsoft-workloads-on-aws/tree/main/docusaurus/docs/SQL Server/Guides/Guide2/Scripts/TSQL_Backup.ps1)
 
 # Pre-requisites: 
 
