@@ -123,6 +123,12 @@ const config = {
             position: 'left',
             label: 'Licensing',
           },
+          {
+            type: 'doc',
+            docId: 'Desktop Engineering/Guides/index',
+            position: 'left',
+            label: 'Desktop Engineering',
+          },          
           // {
           //   type: 'doc',
           //   docId: 'contributors',
