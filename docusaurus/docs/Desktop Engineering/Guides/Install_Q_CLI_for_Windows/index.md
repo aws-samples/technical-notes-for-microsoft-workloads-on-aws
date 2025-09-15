@@ -91,7 +91,7 @@ TimeCreated                      Id LevelDisplayName Message
 
  **Install Q CLI in WSL:**
 - Open a WSL Linux console and follow the instructions to [install Q CLI using a zip file](https://docs.aws.amazon.com/amazonq/latest/qdeveloper-ug/command-line-installing-ssh-setup-autocomplete.html).
-- The most command steps will be:
+- The most common steps will be:
 ```
 curl --proto '=https' --tlsv1.2 -sSf "https://desktop-release.q.us-east-1.amazonaws.com/latest/q-x86_64-linux.zip" -o "q.zip"
 unzip q.zip
