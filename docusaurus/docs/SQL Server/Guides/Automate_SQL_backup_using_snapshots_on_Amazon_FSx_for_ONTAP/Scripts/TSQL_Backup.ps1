@@ -83,8 +83,7 @@ Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\WinTrust
 #The solution is expecting that FSx credentials are saved in AWS SSM parameter store to have a safe and encrypted manner of passing credentials
 $SsmParameter = (Get-SSMParameter -Name "/tsql/filesystem/$FSxID" -WithDecryption $True).Value | Out-String | ConvertFrom-Json
 $FSxUserName = $SsmParameter.fsx.username
-$FSxPassword = $SsmParameter.fsx.password
-$FSxPasswordSecureString = ConvertTo-SecureString $FSxPassword -AsPlainText -Force
+$FSxPasswordSecureString =($SsmParameter.fsx.password | ConvertTo-SecureString -AsPlainText -Force)
 $FSxCredentials = New-Object System.Management.Automation.PSCredential($FSxUserName, $FSxPasswordSecureString)
 $FSxCredentialsInBase64 = [System.Convert]::ToBase64String([System.Text.Encoding]::ASCII.GetBytes($FSxUserName + ':' + $FSxPassword))
 $FSxHostName = "management.$FSxID.fsx.$FSxRegion.amazonaws.com"
