@@ -77,6 +77,17 @@ const FeatureList = [
     ),
     link: '/Licensing/Guides/',
   },
+  {
+    scale: 0.6,
+    title: 'AWS re:Invent 2025 MAM 309',
+    Svg: require('@site/static/img/riv2025logo.svg').default,
+    description: (
+      <>
+        Extra resources and materials from AWS re:Invent 2025 MAM 309 session: AWS migration journey for Microsoft workloads.
+      </>
+    ),
+    link: '/RIV2025MAM309Extras/',
+  },
   // {
   //   title: 'CloudOps',
   //   Svg: require('@site/static/img/cloudops.svg').default,
