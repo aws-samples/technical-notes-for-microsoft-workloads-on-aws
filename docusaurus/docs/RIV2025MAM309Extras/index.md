@@ -1,6 +1,6 @@
 import useBaseUrl from '@docusaurus/useBaseUrl';
 
-# AWSS re:Invent 2025 MAM 309 Extra Resources
+# AWS re:Invent 2025 MAM 309 Extra Resources
 
 <div style={{backgroundImage: `url(${useBaseUrl('/img/riv2025background2.jpg')})`, backgroundSize: "cover", backgroundAttachment: "fixed", backgroundPosition: "center", minHeight: "100vh", padding: "20px", color: "white"}}>
 
@@ -164,6 +164,8 @@ import useBaseUrl from '@docusaurus/useBaseUrl';
 
 [MAM 317: .NET cloud journey: Migration & modernization strategies](https://registration.awsevents.com/flow/awsevents/reinvent2025/event-catalog/page/eventCatalog?search=MAM317) - 300 Level
 
+[DVT 327: From Windows to Linux: .NET application modernization](https://registration.awsevents.com/flow/awsevents/reinvent2025/event-catalog/page/eventCatalog?search=DVT327) - 300 Level
+
 </div>
 </details>
 
@@ -189,6 +191,8 @@ import useBaseUrl from '@docusaurus/useBaseUrl';
 
 [MAM 337: The New York Times: From Google Cloud Platform (GCP) to AWS](https://registration.awsevents.com/flow/awsevents/reinvent2025/event-catalog/page/eventCatalog?search=MAM337) - 300 Level
 
+[DEV 333: Modernize Legacy Applications with Agentic AI](https://registration.awsevents.com/flow/awsevents/reinvent2025/event-catalog/page/eventCatalog?search=DEV333) - 300 Level
+
 </div>
 </details>
 
@@ -211,6 +215,8 @@ import useBaseUrl from '@docusaurus/useBaseUrl';
 
 [MAM 314: Domain driven microservices design with Amazon Bedrock and Amazon Q](https://registration.awsevents.com/flow/awsevents/reinvent2025/event-catalog/page/eventCatalog?search=MAM314) - 300 Level
 
+[DVT 332: Reinvent your DevOps workflows using Kiro](https://registration.awsevents.com/flow/awsevents/reinvent2025/event-catalog/page/eventCatalog?search=DVT332) - 300 Level
+
 </div>
 </details>
 
@@ -219,6 +225,8 @@ import useBaseUrl from '@docusaurus/useBaseUrl';
 <div style={{marginLeft: "20px"}}>
 
 [MAM 318: From vibe coding to vibe modernizing with AWS AI services](https://registration.awsevents.com/flow/awsevents/reinvent2025/event-catalog/page/eventCatalog?search=MAM318) - 300 Level
+
+[DVT 302: Automate your software tasks with agent hooks](https://registration.awsevents.com/flow/awsevents/reinvent2025/event-catalog/page/eventCatalog?search=DVT302) - 300 Level
 
 </div>
 </details>
