@@ -50,11 +50,7 @@ import useBaseUrl from '@docusaurus/useBaseUrl';
 <summary><strong style={{fontSize: "1em"}}>Chalk Talks (300-400 Level)</strong></summary>
 <div style={{marginLeft: "20px"}}>
 
-[MAM 305: Amazon EVS Deep Dive: Strategic migration planning](https://registration.awsevents.com/flow/awsevents/reinvent2025/event-catalog/page/eventCatalog?search=MAM305) - 300 Level
 
-[MAM 323: Map your VMware workloads migration and modernization journey to AWS](https://registration.awsevents.com/flow/awsevents/reinvent2025/event-catalog/page/eventCatalog?search=MAM323) - 300 Level
-
-[MAM 357: VMware to AWS Readiness: Foundational decisions before your migration](https://registration.awsevents.com/flow/awsevents/reinvent2025/event-catalog/page/eventCatalog?search=MAM357) - 300 Level
 
 [MAM 401: Amazon EVS Deep Dive: Advanced networking and storage architecture](https://registration.awsevents.com/flow/awsevents/reinvent2025/event-catalog/page/eventCatalog?search=MAM401) - 400 Level
 
@@ -65,11 +61,7 @@ import useBaseUrl from '@docusaurus/useBaseUrl';
 <summary><strong style={{fontSize: "1em"}}>Workshops (300-400 Level)</strong></summary>
 <div style={{marginLeft: "20px"}}>
 
-[MAM 316: Fast-Track your VMware to AWS Migration with AWS Transform](https://registration.awsevents.com/flow/awsevents/reinvent2025/event-catalog/page/eventCatalog?search=MAM316) - 300 Level
-
 [MAM 335: Scale VMware migrations with Cloud Migration Factory & AWS Transform](https://registration.awsevents.com/flow/awsevents/reinvent2025/event-catalog/page/eventCatalog?search=MAM335) - 300 Level
-
-[MAM 338: VMware to AWS modernization blueprint: Migrate, containerize, scale](https://registration.awsevents.com/flow/awsevents/reinvent2025/event-catalog/page/eventCatalog?search=MAM338) - 300 Level
 
 [MAM 408: Accelerate migration of VMware workloads using agentic AI](https://registration.awsevents.com/flow/awsevents/reinvent2025/event-catalog/page/eventCatalog?search=MAM408) - 400 Level
 
@@ -106,8 +98,6 @@ import useBaseUrl from '@docusaurus/useBaseUrl';
 <div style={{marginLeft: "20px"}}>
 
 [MAM 304: Accelerating SQL Server modernization on AWS with agentic AI](https://registration.awsevents.com/flow/awsevents/reinvent2025/event-catalog/page/eventCatalog?search=MAM304) - 300 Level
-
-[MAM 308: AWS fundamentals for the accidental SQL Server database administrator](https://registration.awsevents.com/flow/awsevents/reinvent2025/event-catalog/page/eventCatalog?search=MAM308) - 300 Level
 
 </div>
 </details>
@@ -149,20 +139,12 @@ import useBaseUrl from '@docusaurus/useBaseUrl';
 
 [MAM 303: Accelerating .NET and SQL Server modernization using Agentic AI](https://registration.awsevents.com/flow/awsevents/reinvent2025/event-catalog/page/eventCatalog?search=MAM303) - 300 Level
 
-[MAM 311: Choose your own modernization adventure: From legacy to cloud-native](https://registration.awsevents.com/flow/awsevents/reinvent2025/event-catalog/page/eventCatalog?search=MAM311) - 300 Level
-
-[MAM 336: Migrate, modernize, and manage your .NET web application the easy way](https://registration.awsevents.com/flow/awsevents/reinvent2025/event-catalog/page/eventCatalog?search=MAM336) - 300 Level
-
-[MAM 405: Easily port .NET applications to Linux with AWS Transform for .NET](https://registration.awsevents.com/flow/awsevents/reinvent2025/event-catalog/page/eventCatalog?search=MAM405) - 400 Level
-
 </div>
 </details>
 
 <details>
 <summary><strong style={{fontSize: "1em"}}>Chalk Talks</strong></summary>
 <div style={{marginLeft: "20px"}}>
-
-[MAM 317: .NET cloud journey: Migration & modernization strategies](https://registration.awsevents.com/flow/awsevents/reinvent2025/event-catalog/page/eventCatalog?search=MAM317) - 300 Level
 
 [DVT 327: From Windows to Linux: .NET application modernization](https://registration.awsevents.com/flow/awsevents/reinvent2025/event-catalog/page/eventCatalog?search=DVT327) - 300 Level
 
@@ -197,23 +179,8 @@ import useBaseUrl from '@docusaurus/useBaseUrl';
 </details>
 
 <details>
-<summary><strong style={{fontSize: "1em"}}>Workshops</strong></summary>
-<div style={{marginLeft: "20px"}}>
-
-[MAM 306: Application modernization challenge](https://registration.awsevents.com/flow/awsevents/reinvent2025/event-catalog/page/eventCatalog?search=MAM306) - 300 Level
-
-[MAM 328: Monolith to microservices: modernization pathways and genAI](https://registration.awsevents.com/flow/awsevents/reinvent2025/event-catalog/page/eventCatalog?search=MAM328) - 300 Level
-
-</div>
-</details>
-
-<details>
 <summary><strong style={{fontSize: "1em"}}>Chalk Talks</strong></summary>
 <div style={{marginLeft: "20px"}}>
-
-[MAM 313: GenAI-Powered Database Decomposition: Breaking Down Monoliths on AWS](https://registration.awsevents.com/flow/awsevents/reinvent2025/event-catalog/page/eventCatalog?search=MAM313) - 300 Level
-
-[MAM 314: Domain driven microservices design with Amazon Bedrock and Amazon Q](https://registration.awsevents.com/flow/awsevents/reinvent2025/event-catalog/page/eventCatalog?search=MAM314) - 300 Level
 
 [DVT 332: Reinvent your DevOps workflows using Kiro](https://registration.awsevents.com/flow/awsevents/reinvent2025/event-catalog/page/eventCatalog?search=DVT332) - 300 Level
 
@@ -223,8 +190,6 @@ import useBaseUrl from '@docusaurus/useBaseUrl';
 <details>
 <summary><strong style={{fontSize: "1em"}}>Builders' Sessions</strong></summary>
 <div style={{marginLeft: "20px"}}>
-
-[MAM 318: From vibe coding to vibe modernizing with AWS AI services](https://registration.awsevents.com/flow/awsevents/reinvent2025/event-catalog/page/eventCatalog?search=MAM318) - 300 Level
 
 [DVT 302: Automate your software tasks with agent hooks](https://registration.awsevents.com/flow/awsevents/reinvent2025/event-catalog/page/eventCatalog?search=DVT302) - 300 Level
 
@@ -238,5 +203,17 @@ import useBaseUrl from '@docusaurus/useBaseUrl';
 [Microsoft Workloads on AWS Learning Plan](https://skillbuilder.aws/learning-plan/FCWAHMDQAW/microsoft-workloads-on-aws-learning-plan/YZ2CQ2MCQQ?trk=7b16ee9f-1cd9-4d47-ae02-1f38f9cdde0c&sc_channel=el)
 
 [Migration and transfer](https://skillbuilder.aws/category/domain/migration-and-transfer?trk=61bad6e5-377e-4710-ad46-7e2058c7bdbb&sc_channel=el)
+
+
+## Blogs and Documents
+[Extend your Active Directory domain to AWS with AWS Managed Microsoft AD (Hybrid Edition)](https://aws.amazon.com/blogs/modernizing-with-aws/extend-your-active-directory-domain-to-aws-with-aws-managed-microsoft-ad-hybrid-edition/)
+
+[Securely extend and access on-premises Active Directory domain controllers in AWS](https://aws.amazon.com/blogs/security/securely-extend-and-access-on-premises-active-directory-domain-controllers-in-aws/)
+
+[Technical Notes for Microsoft Workloads on AWS](https://aws-samples.github.io/technical-notes-for-microsoft-workloads-on-aws/)
+## Videos
+[AWS Official YouTube Channel](https://www.youtube.com/@amazonwebservices/featured)
+
+[YouTube Playlist: AWS for Microsoft Workloads](https://youtube.com/playlist?list=PLhr1KZpdzukdJllxulUM7pMB7aJ2_FfTP&si=gG3iJfoIntDpKw1B)
 
 </div>
