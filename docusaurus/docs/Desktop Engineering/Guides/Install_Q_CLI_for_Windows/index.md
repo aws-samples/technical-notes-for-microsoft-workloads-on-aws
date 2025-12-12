@@ -7,13 +7,11 @@ sidebar_label: Install Kiro CLI on Windows Subsystem for Linux
 by Craig Cooley
 
 ### Introduction
-Amazon Kiro CLI is currently available for Linux and macOS, however there is not a native Windows version available. Microsoft includes 'Windows Subsystem for Linux' on Windows 11, Window Server 2022 and Windows Server 2025 which can run the Linux distributions supports by Kiro CLI. (Ubuntu 22 and 24).
+Amazon Kiro CLI is currently available for Linux and macOS, however a native version for Windows is not available. Microsoft includes 'Windows Subsystem for Linux' on Windows 11, Server 2022, and Server 2025 which can run the Linux distributions supported by Kiro CLI.
 
-Below are the basic instructions for installing Kiro CLI on Windows which offers customers a way to use Amazon Kiro CLI and interact directly with the Windows OS.
+Below are the basic instructions for installing Kiro CLI on Windows which offers customers a way to use Amazon Kiro CLI and interact directly with the Windows OS. To use Kiro CLI to interact with AWS commands, kiro-cli is preinstalled in Amazon CloudShell. 
 
-### Here are two Examples of Kiro CLI interaction with Windows OS from WSL:
-Kiro will initially detect that it's running on Linux and may not offer to run command directly on Windows.  Simply tell Kiro that's it's running in WSL.  
-
+### Here are two Examples of using Kiro CLI to interact with Windows from WSL:
 
 #### Example 1: Ask Kiro to check when Windows was last updated: 
 
@@ -30,9 +28,9 @@ powershell
 Get-HotFix | Sort-Object InstalledOn -Descending | Select-Object -First 10
 ```
 
-**Notice Kiro reports it's runing on Linux.  In this case, simply tell Kiro CLI that it's running on Windows.**
+**Notice Kiro reports it's runing on Linux. When this happens, simply tell Kiro CLI that it's running on Windows.**. 
 
-From WSL, any command that ends in .exe, executes in Windows, so Kiro can run PowerShell commands from bash using the syntax `powershell.exe "Get-HotFix" `
+From WSL, any command that ends in `.exe`, executes in Windows, so Kiro can run PowerShell commands from the linux bash prompt using the syntax `powershell.exe "Get-HotFix" `
 
 ```
 User> Kiro is running on WSL.  You can access Windows by running powershell.exe and any .exe command.
@@ -59,15 +57,12 @@ Kiro> Your Windows operating system was last updated on September 13, 2025. The 
 • KB5064401 (Update)
 ```
 
-From WSL, any command that ends in .exe, executes in Windows, so Kiro can run PowerShell commands from bash using the syntax `powershell.exe "Get-HotFix" `
-
 #### Example 2: Check Windows Event Log: 
 ```
 User> how do I query windows system event log for event ID 6009
 
 Kiro> You can query the Windows System Event Log for event ID 6009 from WSL using PowerShell. Here are several approaches:
 ## Using Get-WinEvent (recommended)
-bash
 powershell.exe -Command "Get-WinEvent -FilterHashtable @{LogName='System'; ID=6009}"
 
  ● I will run the following shell command:
@@ -87,7 +82,7 @@ TimeCreated                      Id LevelDisplayName Message
 
 ## Steps to install Kiro CLI on Windows: 
 
-**Kiro CLI - [Supported environments](https://docs.aws.amazon.com/amazonq/latest/qdeveloper-ug/command-line-supported-envs.html)**:
+**Kiro CLI - [Get started](https://kiro.dev/docs/cli/)**:
 - Amazon Kiro CLI integrates with Windows using [Windows Subsystem for Linux](https://learn.microsoft.com/en-us/windows/wsl/) either WSLv1 or WSLv2
 - Platform requirements: Recent distributions of Fedora and Ubuntu.
 - Architecture: x86_64 or aarch64
@@ -111,7 +106,7 @@ unzip kirocli.zip
 - You can select 'no' when asked to modify the shell config.
 - Specify a Builder ID or IAM Identity Center ID to login.
 
-After Kiro is installed and activated, you can run `kiro-cli` to start interacting with Kiro CLI.
+After Kiro is installed and activated, run `kiro-cli` to start interacting with Kiro CLI.
 
 ```
 cc@WS-26CVSGUREALG:~$ kiro-cli
