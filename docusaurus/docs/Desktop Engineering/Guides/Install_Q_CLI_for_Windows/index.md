@@ -17,11 +17,9 @@ Below are the basic instructions for installing Kiro CLI on Windows which offers
 
 ```
 User> When was my Windows operating system last updated?
-Kiro > I can help you check when your Windows operating system was last updated, but I notice from the system context that you're
-currently running on a Linux system.
+Kiro > I can help you check when your Windows operating system was last updated, but I notice from the system context that you're currently running on a Linux system.
 
-If you want to check Windows update history on a different machine or if you have access to a Windows system, you can use these
-methods:
+If you want to check Windows update history on a different machine or if you have access to a Windows system, you can use these methods:
 
 Method 1: PowerShell command
 powershell
