@@ -7,8 +7,7 @@ including availability zones and on-demand pricing for Linux and Windows operati
 
 Use the `-ZoneID` switch to show AZ IDs (e.g., use2-az1) instead of AZ names (e.g., us-east-2a)
  
-[The PowerShell script](https://github.com/aws-samples/technical-notes-for-microsoft-workloads-on-aws/blob/main/docusaurus/docs/Code%20Repo/Guides/EC2_Pricing_and_Availability/Scripts/get-instance-availability.ps1) retrieves real-time pricing data from the AWS Pricing API and displays results
-in a formatted table showing regional availability and hourly costs.
+[The PowerShell script](https://github.com/aws-samples/technical-notes-for-microsoft-workloads-on-aws/blob/main/docusaurus/docs/Code%20Repo/EC2_Pricing_and_Availability/Scripts/get-instance-availability.ps1) retrieves real-time pricing data from the AWS Pricing API and displays results in a formatted table showing regional availability and hourly costs.
 
 
 ```bash
