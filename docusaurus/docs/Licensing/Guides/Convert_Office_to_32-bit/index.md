@@ -3,6 +3,13 @@ sidebar_position: 40
 ---
 
 # Convert Office LTSC 64-bit to 32-bit on EC2 Windows
+
+:::tip Get Started Today
+Office LTSC Professional Plus 32-bit is now available on AWS Marketplace. [Launch an instance →](https://aws.amazon.com/marketplace/pp/prodview-bh46d5p2hapns)
+
+For extra customization or manual installation, follow this guide.
+:::
+
 by Ali Alzand
 
 This guide walks you through converting a 64-bit Office installation to 32-bit Office LTSC Professional Plus 2021 on an EC2 Windows instance and activating it using AWS License Manager.
