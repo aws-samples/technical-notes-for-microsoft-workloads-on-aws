@@ -129,12 +129,12 @@ const config = {
             position: 'left',
             label: 'Desktop Engineering',
           },
-          {
-            type: 'doc',
-            docId: 'RIV2025MAM309Extras/index',
-            position: 'left',
-            label: 'AWS re:Invent 2025 MAM 309 Extra Resources',
-          },
+          // {
+          //   type: 'doc',
+          //   docId: 'RIV2025MAM309Extras/index',
+          //   position: 'left',
+          //   label: 'AWS re:Invent 2025 MAM 309 Extra Resources',
+          // },
           // {
           //   type: 'doc',
           //   docId: 'contributors',

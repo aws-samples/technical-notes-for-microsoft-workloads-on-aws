@@ -79,14 +79,14 @@ const FeatureList = [
   },
   {
     scale: 0.6,
-    title: 'AWS re:Invent 2025 MAM 309',
-    Svg: require('@site/static/img/riv2025logo.svg').default,
+    title: 'AWS re:Invent resources',
+    Svg: require('@site/static/img/2025_reInvent_Logo_Black.svg').default,
     description: (
       <>
-        Extra resources and materials from AWS re:Invent 2025 MAM 309 session: AWS migration journey for Microsoft workloads.
+        Extra resources and materials for some of AWS re:Invent sessions.
       </>
     ),
-    link: '/RIV2025MAM309Extras/',
+    link: '/AWS re:Invent/',
   },
   // {
   //   title: 'CloudOps',

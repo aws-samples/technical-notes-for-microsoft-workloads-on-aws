@@ -22,4 +22,4 @@ This site is organized into seven Microsoft technology domains:
 * Licensing
 * Desktop Engineering
 
-We're also hosting [**AWS re:Invent 2025 MAM 309 Extra Resources**](./RIV2025MAM309Extras/) in this website. you can find all extra material discussed during the [**MAM309: AWS migration journey: 2025 itinerary for Microsoft workloads**](https://registration.awsevents.com/flow/awsevents/reinvent2025/event-catalog/page/eventCatalog?search=MAM309) in Las Vegas on December 2025.
+We're also hosting [**AWS re:Invent Extra Resources**](./AWS%20re:Invent/) for some of the sessions in this website. To learn more about AWS re:Invent, please visit [reinvent.awsevents.com](https://reinvent.awsevents.com/).
