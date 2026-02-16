@@ -27,13 +27,11 @@ VPC](https://docs.aws.amazon.com/vpc/latest/userguide/VPC_DHCP_Options.html).
 
 The components of the [EC2 tag solution](https://github.com/aws-samples/ssm-automation-custom-ad-domain-join-unjoin/blob/main/templates/cloudformation/cfn-evb-lambda-tags-adjoinunjoin.yaml) include:
 
-- A Python-based [Lambda function](https://github.com/aws-samples/ssm-automation-custom-ad-domain-join-unjoin/blob/main/templates/lambda/ec2-tags-domainjoinunjoin.py). 
-- An EventBridge rule that triggers the Lambda function. 
-- [Identity and Access Management (IAM) roles](https://docs.aws.amazon.com/systems-manager/latest/userguide/setup-instance-profile.html)
-  to provide permissions to the Lambda function. 
+- A Python-based [Lambda function](https://github.com/aws-samples/ssm-automation-custom-ad-domain-join-unjoin/blob/main/templates/lambda/ec2-tags-domainjoinunjoin.py).
+- An EventBridge rule that triggers the Lambda function.
+- [Identity and Access Management (IAM) roles](https://docs.aws.amazon.com/systems-manager/latest/userguide/setup-instance-profile.html) to provide permissions to the Lambda function.
 - [Amazon CloudWatch Logs](https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/WhatIsCloudWatchLogs.html) that logs Lambda function output.
-
-- To create the Lambda function manually, [download]{.underline} the [Python function from GitHub](https://github.com/aws-samples/ssm-automation-custom-ad-domain-join-unjoin/blob/main/templates/lambda/ec2-tags-domainjoinunjoin.py).
+- To create the Lambda function manually, [download] the [Python function from GitHub](https://github.com/aws-samples/ssm-automation-custom-ad-domain-join-unjoin/blob/main/templates/lambda/ec2-tags-domainjoinunjoin.py).
 
 The components of the [Amazon EC2 Auto Scaling solution](https://github.com/aws-samples/ssm-automation-custom-ad-domain-join-unjoin/blob/main/templates/cloudformation/cfn-evb-ssm-automation-adjoinunjoin.yaml) include:
 
@@ -107,7 +105,7 @@ Figure 4 - Four new EC2 instances launched from AWS CloudShell.
 
 8. In the navigation pane, select **Automation**. If successful, 4 executions will be listed (Figure 5).
 
-![]( ./img/image5.png){width="6.5in" height="2.071847112860892in"}
+![]( ./img/image5.png)
 
 Figure 5 - Four Automation runbook executions with a status code of **Success** which means the AD domain join was completed.
 
@@ -129,7 +127,7 @@ foreach ($instanceid in $instanceIds) {
 ```
 11. If successful, validate the tags are changed in the Amazon EC2 console (Figure 6).
 
-![]( ./img/image6.png){width="6.5in" height="3.0136865704286966in"}
+![]( ./img/image6.png)
 
 Figure 6 - Tag value changed to **Unjoin** after running the PowerShell script.
 
@@ -190,8 +188,8 @@ Just like the Amazon EC2 tag example, Systems Manager will execute the AD domain
 
 Figure 11 - The Automation runbook execution with a status code of **Success** which means the AD domain join was completed.
 
-Repeating steps 14 -- 18 and changing **Desired capacity type** to **0** will start the removal of Amazon EC2 instances launched by the Auto Scaling group. The event pattern will see the termination lifecycle hook and attempt to remove the Amazon EC2 instance from your AD domain. To confirm, go to the **Instance management** tab and confirm that the Lifecycle changes from **InService** to **Terminating:Wait** (Figure 12**)**.
+Repeating steps 14 -- 18 and changing **Desired capacity type** to **0** will start the removal of Amazon EC2 instances launched by the Auto Scaling group. The event pattern will see the termination lifecycle hook and attempt to remove the Amazon EC2 instance from your AD domain. To confirm, go to the **Instance management** tab and confirm that the Lifecycle changes from **InService** to **Terminating:Wait** **(Figure 12)**.
 
-![Figure 11 - Example of an Amazon EC2 instance in a Terminating:Wait lifecycle. EventBridge will initiate the Systems Manager Automation runbook to perform an AD domain unjoin activity.]( ./img/image12.png)
+![]( ./img/image12.png)
 
 Figure 12 - Example of an Amazon EC2 instance in a **Terminating:Wait** lifecycle. EventBridge will initiate the Systems Manager Automation runbook to perform an AD domain unjoin activity.
