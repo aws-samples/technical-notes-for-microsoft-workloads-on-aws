@@ -28,8 +28,7 @@ Asia Pacific (Tokyo)     $0.314     $0.498
 
 Use the `-ZoneID` switch to show AZ IDs (e.g., use2-az1) instead of AZ names (e.g., us-east-2a)
  
-[The PowerShell script](https://github.com/aws-samples/technical-notes-for-microsoft-workloads-on-aws/blob/30fcc982928f8911ce5ec5a6d662e1c11d31e7c1/docusaurus/docs/Code%20Repo/EC2_Pricing_and_Availability/Scripts/get-instance-availability.ps1) retrieves real-time pricing data from the AWS Pricing API and displays results
-in a formatted table showing regional availability and hourly costs.
+[The PowerShell script](https://github.com/aws-samples/technical-notes-for-microsoft-workloads-on-aws/blob/30fcc982928f8911ce5ec5a6d662e1c11d31e7c1/docusaurus/docs/Code%20Repo/EC2_Pricing_and_Availability/Scripts/get-instance-availability.ps1) retrieves real-time pricing data from the AWS Pricing API and displays results in a formatted table showing regional availability and hourly costs.
 
 RECOMMENDED: Run [this PowerShell script](https://github.com/aws-samples/technical-notes-for-microsoft-workloads-on-aws/blob/30fcc982928f8911ce5ec5a6d662e1c11d31e7c1/docusaurus/docs/Code%20Repo/EC2_Pricing_and_Availability/Scripts/get-instance-availability.ps1) from AWS [CloudShell](https://docs.aws.amazon.com/cloudshell/latest/userguide/welcome.html) for the best experience. CloudShell comes with [PowerShell and AWS modules pre-installed](https://docs.aws.amazon.com/powershell/v5/userguide/pstools-getting-set-up-cloudshell.html), and credentials are automatically configured. Simply [upload](https://docs.aws.amazon.com/cloudshell/latest/userguide/getting-started.html#folder-upload) the script and run it.
     
@@ -39,50 +38,80 @@ Examples Syntax:
 ```bash
 .PARAMETER InstanceType
     One or more EC2 instance types to query. Accepts comma-separated values.
-    Default: m8a.xlarge
+    Default: m8i.4xlarge
+
+.PARAMETER Region
+    One or more AWS regions, region prefixes (e.g. 'us', 'eu-west'), or 'all'.
+    Supports arrays: -Region us-east-1, us-east-2
+    Prefix matching: -Region us (matches all us-* regions)
+    Defaults to all enabled regions.
 
 .PARAMETER SortBy
-    Sort results by Region, LinuxPrice, or WindowsPrice.
-    Default: WindowsPrice
+    Sort results by Region or Price.
+    Default: Region
 
 .PARAMETER ZoneId
     Display AZ IDs (e.g., use2-az1) instead of AZ names (e.g., us-east-2a).
 
+.PARAMETER TPC1
+    Show an additional Windows TPC=1 pricing column (Optimize CPUs with ThreadsPerCore=1).
+
+.PARAMETER Hours
+    Number of hours for cost calculation, or 'month' (730) / 'year' (8760).
+    Default: 1 (hourly rate)
+
 .EXAMPLE
     pwsh -File get-instance-availability.ps1
-    Run with default parameters (m8a.xlarge, sorted by WindowsPrice).
+    Run with default parameters (m8i.4xlarge, sorted by Region).
 
 .EXAMPLE
     pwsh -File get-instance-availability.ps1 -InstanceType m8a.2xlarge
     Query availability and pricing for m8a.2xlarge instances across all regions.
 
 .EXAMPLE
-    pwsh -File get-instance-availability.ps1 -InstanceType "m7i.2xlarge,m8i.2xlarge" -SortBy WindowsPrice
-    Query multiple instance types and sort results by Windows pricing.
+    pwsh -File get-instance-availability.ps1 -InstanceType "m7i.2xlarge,m8i.2xlarge" -SortBy Price
+    Query multiple instance types and sort results by price.
 
 .EXAMPLE
-    pwsh -File get-instance-availability.ps1 -InstanceType m8a.xlarge -SortBy Region
-    Query m8a.xlarge instances and sort results alphabetically by region name.
+    pwsh -File get-instance-availability.ps1 -InstanceType m8i.xlarge -TPC1
+    Show Windows TPC=1 pricing column.
+
+.EXAMPLE
+    pwsh -File get-instance-availability.ps1 -Region us
+    Query default instance type across all US regions only.
+
+.EXAMPLE
+    pwsh -File get-instance-availability.ps1 -Region us-east-1,eu-west-1 -InstanceType m7i.xlarge
+    Query m7i.xlarge in specific regions.
 
 .EXAMPLE
     pwsh -File get-instance-availability.ps1 -ZoneId
     Display results with AZ IDs (use2-az1) instead of AZ names (us-east-2a).
 
+.EXAMPLE
+    pwsh -File get-instance-availability.ps1 -Region us -Hours month
+    Query US regions with monthly (730 hours) cost estimates.
+
 .NOTES
     Author: coolcrai@amazon.com
-    Version: 1.0
-    Last Updated: October 23, 2025
+    Version: 1.1
+    Last Updated: February 27, 2026
     
+    RECOMMENDED: Run this script from AWS CloudShell for the best experience.
+    CloudShell comes with PowerShell and AWS modules pre-installed, and credentials
+    are automatically configured. Simply upload the script and run it.
     
-Requirements:
-    - AWS PowerShell modules: AWS.Tools.EC2, AWS.Tools.Pricing (preconfigured in AWS CloudShell)
-    - Valid AWS credentials configured (preconfigured in AWS CloudShell)
+    Requirements:
+    - AWS PowerShell modules: AWS.Tools.EC2, AWS.Tools.Pricing
+    - Valid AWS credentials configured
     - Pricing API access (queries us-east-1 region)
-
-Pricing Information:
-    - Linux pricing is for standard Linux instances
-    - Windows pricing includes license costs (License Included model)
-    - All prices are hourly, on-demand rates in USD
+    
+    Pricing Information:
+    - Linux pricing is for standard Linux/Unix instances
+    - Windows Default pricing includes license costs (License Included model)
+    - Windows TPC=1 pricing is Linux base + (cores x $0.046/vCPU-hr Windows license rate)
+    - Windows TPC=1 shows N/A for t3/t3a burstable and bare metal instances
+    - All prices are hourly on-demand rates in USD
 
 ```
 
@@ -91,5 +120,5 @@ Example output from [CloudShell](https://docs.aws.amazon.com/cloudshell/latest/u
 `$ pwsh -File get-instance-availability.ps1 -InstanceType "m7a.xlarge, m8a.xlarge"`
 ![](images/m7a-m8a_example.png)
 
-`$ pwsh -File get-instance-availability.ps1 -InstanceType p5.4xlarge`
+`$ pwsh -File get-instance-availability.ps1 -InstanceType p5.4xlarge -ZoneID -Sortby Price`
 ![](images/p5.4xlarge.png)
