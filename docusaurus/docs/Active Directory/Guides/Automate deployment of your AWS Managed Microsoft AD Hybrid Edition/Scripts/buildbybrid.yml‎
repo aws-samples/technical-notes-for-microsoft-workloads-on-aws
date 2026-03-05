@@ -1,0 +1,902 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Deploys a new VPC with an Active Directory Domain (onprem.com) with two domain controllers, and then extends it AWS Managed AD Hybrid Edition'
+
+Parameters:
+  AvailabilityZone1:
+    Type: AWS::EC2::AvailabilityZone::Name
+    Description: First Availability Zone
+    Default: us-east-1a
+  AvailabilityZone2:
+    Type: AWS::EC2::AvailabilityZone::Name
+    Description: Second Availability Zone
+    Default: us-east-1b
+  AMI:
+    Default: /aws/service/ami-windows-latest/Windows_Server-2022-English-Full-Base
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+
+Resources:
+  # VPC Infrastructure
+  VPC:
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W60
+            reason: Flow logs optional.
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: AD-VPC
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: AD-IGW
+
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+
+  # Subnets
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.1.0/24
+      AvailabilityZone: !Ref AvailabilityZone1
+      Tags:
+        - Key: Name
+          Value: Private-Subnet-1
+
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.2.0/24
+      AvailabilityZone: !Ref AvailabilityZone2
+      Tags:
+        - Key: Name
+          Value: Private-Subnet-2
+
+  PublicSubnet1:
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W33
+            reason: This is for demo purposes.
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.3.0/24
+      AvailabilityZone: !Ref AvailabilityZone1
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: Public-Subnet-1
+
+  PublicSubnet2:
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W33
+            reason: This is for demo purposes.
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.4.0/24
+      AvailabilityZone: !Ref AvailabilityZone2
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: Public-Subnet-2
+
+  # Route Tables
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: Private-RT
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: Public-RT
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: AttachGateway
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PrivateSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet1
+      RouteTableId: !Ref PrivateRouteTable
+
+  PrivateSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet2
+      RouteTableId: !Ref PrivateRouteTable
+
+  PublicSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet1
+      RouteTableId: !Ref PublicRouteTable
+
+  PublicSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet2
+      RouteTableId: !Ref PublicRouteTable
+
+  # Security Group
+  DomainControllerSecurityGroup:
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W42
+            reason: security group allows traffic from the VPC
+          - id: W47
+            reason: security group allows traffic from the VPC
+          - id: F1000
+            reason: Outbound traffic to all is fine.
+          - id: W27
+            reason: Ingress port range from the VPC CIDR
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for domain controllers
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - Description: All Local VPC Traffic
+          FromPort: -1
+          IpProtocol: "-1"
+          CidrIp: !GetAtt VPC.CidrBlock
+          ToPort: -1
+        - Description: SSH Access
+          FromPort: 22
+          IpProtocol: tcp
+          CidrIp: !GetAtt VPC.CidrBlock
+          ToPort: 22
+        - Description: PKI Access
+          FromPort: 135
+          IpProtocol: tcp
+          CidrIp: !GetAtt VPC.CidrBlock
+          ToPort: 135
+        - Description: RDP Access
+          FromPort: 3389
+          IpProtocol: tcp
+          CidrIp: !GetAtt VPC.CidrBlock
+          ToPort: 3389
+        - Description: PKI Ephemeral Access
+          FromPort: 49152
+          IpProtocol: tcp
+          CidrIp: !GetAtt VPC.CidrBlock
+          ToPort: 65535
+
+  # Administrator Password in Secrets Manager
+  AdminPassword:
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W77
+            reason: Secrets uses AWS default KMS key.
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: onprem-domain-admin-password
+      Description: Administrator password for onprem.com domain
+      GenerateSecretString:
+        SecretStringTemplate: '{"username": "Administrator"}'
+        GenerateStringKey: 'password'
+        PasswordLength: 10
+        ExcludeCharacters: '"@/\'
+
+  # IAM Role for EC2 instances
+  EC2Role:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: SecretsManagerAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: !Ref AdminPassword
+
+  EC2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref EC2Role
+
+  # First Domain Controller
+  DomainController1:
+    Type: AWS::EC2::Instance
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT30M
+        Count: 1
+    Properties:
+      ImageId: !Ref AMI
+      InstanceType: t3.medium
+      SubnetId: !Ref PublicSubnet1
+      SecurityGroupIds:
+        - !Ref DomainControllerSecurityGroup
+      IamInstanceProfile: !Ref EC2InstanceProfile
+      PrivateIpAddress: 10.0.3.10
+      UserData:
+        Fn::Base64: !Sub |
+          <powershell>
+
+          # Create a scheduled task to run after restart
+          $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-Command `"cfn-signal.exe -e 0 --stack ${AWS::StackName} --resource DomainController1 --region ${AWS::Region}`""
+          $trigger = New-ScheduledTaskTrigger -AtStartup
+          $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount
+          Register-ScheduledTask -TaskName "CFNSignal" -Action $action -Trigger $trigger -Principal $principal
+
+           # Get password from Secrets Manager
+          $SecretArn = "${AdminPassword}"
+          $SecretValue = (Get-SECSecretValue -SecretId $SecretArn).SecretString | ConvertFrom-Json
+          $NewPassword = ConvertTo-SecureString $SecretValue.password -AsPlainText -Force
+          
+          # Reset Administrator password
+          Set-LocalUser -Name "Administrator" -Password $NewPassword
+          
+          # Enable Administrator account (in case it's disabled)
+          Enable-LocalUser -Name "Administrator"
+
+          # Install AD DS Role
+          Install-WindowsFeature -Name AD-Domain-Services -IncludeManagementTools
+
+          Start-Sleep -Seconds 5  # Wait for network to stabilize   
+ 
+          # Install new forest
+          Install-ADDSForest -DomainName "onprem.com" -SafeModeAdministratorPassword $NewPassword -Force
+          </powershell>
+      Tags:
+        - Key: Name
+          Value: DC1-onprem-com
+        - Key: StackName
+          Value: !Ref AWS::StackName
+
+  # Second Domain Controller
+  DomainController2:
+    Type: AWS::EC2::Instance
+    DependsOn: DomainController1
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT30M
+        Count: 1
+    Properties:
+      ImageId: !Ref AMI
+      InstanceType: t3.medium
+      SubnetId: !Ref PublicSubnet2
+      SecurityGroupIds:
+        - !Ref DomainControllerSecurityGroup
+      IamInstanceProfile: !Ref EC2InstanceProfile
+      PrivateIpAddress: 10.0.4.10
+      UserData:
+        Fn::Base64: !Sub |
+          <powershell>
+
+          # Create a scheduled task to run after restart
+          $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-Command `"cfn-signal.exe -e 0 --stack ${AWS::StackName} --resource DomainController2 --region ${AWS::Region}`""
+          $trigger = New-ScheduledTaskTrigger -AtStartup
+          $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount
+          Register-ScheduledTask -TaskName "CFNSignal" -Action $action -Trigger $trigger -Principal $principal
+
+          # Set DNS to first DC
+          $adapter = Get-NetAdapter | Where-Object {$_.Status -eq "Up"}
+          Set-DnsClientServerAddress -InterfaceIndex $adapter.InterfaceIndex -ServerAddresses "10.0.3.10"
+
+          Start-Sleep -Seconds 3  # Wait for network to stabilize
+
+          # Get password from Secrets Manager
+          $domain = "onprem.com"
+          $Username = "Administrator"
+          $FinalUserName = $domain + '\' + $Username
+
+          # Get password from Secrets Manager
+          $SecretArn = "${AdminPassword}"
+          $SecretValue = (Get-SECSecretValue -SecretId $SecretArn).SecretString | ConvertFrom-Json
+          $NewPassword = ConvertTo-SecureString $SecretValue.password -AsPlainText -Force
+          $Credential = New-Object System.Management.Automation.PsCredential($FinalUserName, $NewPassword)  
+          
+          # Reset Administrator password
+          Set-LocalUser -Name "Administrator" -Password $NewPassword    
+
+          # Enable Administrator account (in case it's disabled)
+          Enable-LocalUser -Name "Administrator"  
+
+          # Install AD DS Role
+          Install-WindowsFeature -Name AD-Domain-Services -IncludeManagementTools
+
+          Install-ADDSDomainController -DomainName $domain -InstallDns:$true -Credential $Credential -SafeModeAdministratorPassword $NewPassword -confirm:$false
+          </powershell>
+      Tags:
+        - Key: Name
+          Value: DC2-onprem-com
+        - Key: StackName
+          Value: !Ref AWS::StackName
+
+  # Hybrid AD Assessment Components
+  LayerBucket:
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W51
+            reason: This is for demo only, warning can be ignored. s3 is locked down by default.
+          - id: W35
+            reason: This is for demo only, access logging warning can be ignored. 
+          - id: W41
+            reason: This is for demo only, encryption warning can be ignored. 
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${AWS::StackName}-lambda-layers-${AWS::AccountId}"
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  LayerDownloadRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: S3AccessPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:GetObject
+                Resource: !Sub "${LayerBucket.Arn}/*"
+
+  LayerDownloadFunction:
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: The lambda does not need to be deployed in a VPC
+          - id: W92
+            reason: This is for demo only. ReservedConcurrentExecutions can be ignored.
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "${AWS::StackName}-layer-download"
+      Runtime: python3.11
+      Handler: index.lambda_handler
+      Role: !GetAtt LayerDownloadRole.Arn
+      Timeout: 600
+      Code:
+        ZipFile: |
+          import json
+          import boto3
+          import cfnresponse
+          import logging
+          import subprocess
+          import os
+          import shutil
+          
+          logger = logging.getLogger()
+          logger.setLevel(logging.INFO)
+          
+          def lambda_handler(event, context):
+              try:
+                  if event['RequestType'] == 'Create':
+                      bucket_name = event['ResourceProperties']['BucketName']
+                      
+                      logger.info("Creating boto3 layer with pip install")
+                      
+                      # Create layer directory
+                      layer_dir = '/tmp/python'
+                      os.makedirs(layer_dir, exist_ok=True)
+                      
+                      # Install boto3 and dependencies to layer directory
+                      subprocess.run([
+                          'pip', 'install', 'boto3==1.40.14', 
+                          '--target', layer_dir, 
+                          '--no-cache-dir'
+                      ], check=True)
+                      
+                      logger.info("Boto3 installation completed")
+                      
+                      # Create zip file
+                      zip_path = '/tmp/boto3-layer.zip'
+                      shutil.make_archive('/tmp/boto3-layer', 'zip', '/tmp', 'python')
+                      
+                      logger.info(f"Created layer zip: {os.path.getsize(zip_path)} bytes")
+                      
+                      # Upload to S3 bucket
+                      s3_client = boto3.client('s3')
+                      s3_client.upload_file(zip_path, bucket_name, 'boto3-layer.zip')
+                      
+                      logger.info("Layer uploaded to S3 successfully")
+                      cfnresponse.send(event, context, cfnresponse.SUCCESS, {'S3Key': 'boto3-layer.zip'})
+                  else:
+                      cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
+                      
+              except Exception as e:
+                  logger.error(f"Error: {str(e)}")
+                  import traceback
+                  logger.error(f"Traceback: {traceback.format_exc()}")
+                  cfnresponse.send(event, context, cfnresponse.FAILED, {'Error': str(e)})
+
+  LayerDownloadResource:
+    Type: AWS::CloudFormation::CustomResource
+    Properties:
+      ServiceToken: !GetAtt LayerDownloadFunction.Arn
+      BucketName: !Ref LayerBucket
+
+  Boto3Layer:
+    Type: AWS::Lambda::LayerVersion
+    DependsOn: LayerDownloadResource
+    Properties:
+      LayerName: !Sub "${AWS::StackName}-boto3-layer"
+      Description: "Updated boto3 with Hybrid AD support"
+      Content:
+        S3Bucket: !Ref LayerBucket
+        S3Key: "boto3-layer.zip"
+      CompatibleRuntimes:
+        - python3.11
+
+  # Lambda function to create domain credentials secret with actual password
+  DomainCredentialsFunction:
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: The lambda does not need to be deployed in a VPC.
+          - id: W92
+            reason: This is for demo only. ReservedConcurrentExecutions can be ignored.
+    Type: AWS::Lambda::Function
+    DependsOn: HybridAssessmentLambdaRole
+    Properties:
+      FunctionName: !Sub "${AWS::StackName}-domain-credentials"
+      Runtime: python3.11
+      Handler: index.lambda_handler
+      Role: !GetAtt HybridAssessmentLambdaRole.Arn
+      Timeout: 300
+      Code:
+        ZipFile: |
+          import json
+          import boto3
+          import cfnresponse
+          import logging
+          
+          logger = logging.getLogger()
+          logger.setLevel(logging.INFO)
+          
+          def lambda_handler(event, context):
+              try:
+                  if event['RequestType'] == 'Create':
+                      secrets_client = boto3.client('secretsmanager')
+                      
+                      # Get the actual password from the admin password secret
+                      admin_secret_arn = event['ResourceProperties']['AdminPasswordArn']
+                      admin_response = secrets_client.get_secret_value(SecretId=admin_secret_arn)
+                      admin_secret = json.loads(admin_response['SecretString'])
+                      actual_password = admin_secret['password']
+                      
+                      # Create the domain credentials secret with the actual password
+                      secret_name = event['ResourceProperties']['SecretName']
+                      domain_credentials = {
+                          "customerAdAdminDomainUsername": "Administrator",
+                          "customerAdAdminDomainPassword": actual_password
+                      }
+                      
+                      response = secrets_client.create_secret(
+                          Name=secret_name,
+                          Description="Domain administrator credentials for hybrid AD assessment",
+                          SecretString=json.dumps(domain_credentials)
+                      )
+                      
+                      logger.info(f"Created domain credentials secret: {response['ARN']}")
+                      cfnresponse.send(event, context, cfnresponse.SUCCESS, {'SecretArn': response['ARN']})
+                      
+                  elif event['RequestType'] == 'Delete':
+                      secrets_client = boto3.client('secretsmanager')
+                      secret_name = event['ResourceProperties']['SecretName']
+                      try:
+                          secrets_client.delete_secret(SecretId=secret_name, ForceDeleteWithoutRecovery=True)
+                      except:
+                          pass  # Secret might not exist
+                      cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
+                      
+                  else:
+                      cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
+                      
+              except Exception as e:
+                  logger.error(f"Error: {str(e)}")
+                  cfnresponse.send(event, context, cfnresponse.FAILED, {'Error': str(e)})
+
+  # Domain credentials secret for hybrid assessment
+  DomainCredentialsSecret:
+    Type: AWS::CloudFormation::CustomResource
+    DependsOn: AdminPassword
+    Properties:
+      ServiceToken: !GetAtt DomainCredentialsFunction.Arn
+      AdminPasswordArn: !Ref AdminPassword
+      SecretName: !Sub "${AWS::StackName}-domain-credentials"
+             
+  # IAM Role for Lambda functions
+  HybridAssessmentLambdaRole:
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W11
+            reason: Service-level AWS APIs have been restricted to the least privelege permissions for the services.
+          - id: W76
+            reason: SPCM not required.
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: HybridAssessmentPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ds:CreateLogSubscription
+                  - ds:UpdateHybridAD
+                  - ds:CreateHybridAD
+                  - ds:DescribeHybridADUpdate
+                  - ds:StartADAssessment
+                  - ds:DeleteADAssessment
+                  - ds:Describe*
+                  - ds:List*
+                  - ds:RegisterEventTopic
+                  - ds:RejectSharedDirectory
+                  - ds:ShareDirectory
+                  - ds:UnshareDirectory
+                  - ds:AuthorizationApplication
+                  - ds:AuthorizeApplication
+                  - ds:CheckAlias
+                  - secretsmanager:DescribeSecret
+                  - secretsmanager:CreateSecret
+                  - ec2:AuthorizeSecurityGroupEgress
+                  - ec2:AuthorizeSecurityGroupIngress
+                  - ec2:CreateNetworkInterface
+                  - ec2:CreateSecurityGroup
+                  - ec2:DeleteNetworkInterface
+                  - ec2:DeleteSecurityGroup
+                  - ec2:DescribeInstances
+                  - ec2:DescribeNetworkInterfaces
+                  - ec2:DescribeSubnets
+                  - ec2:DescribeVpcs
+                  - ec2:RevokeSecurityGroupEgress
+                  - ec2:RevokeSecurityGroupIngress
+                  - ec2:DescribeSecurityGroups
+                  - ec2:CreateNetworkInterfacePermission
+                  - ec2:CreateTags
+                  - iam:CreateServiceLinkedRole
+                  - iam:GetRole
+                  - logs:CreateLogGroup
+                  - logs:GetLogEvents
+                  - logs:PutResourcePolicy
+                  - logs:CreateLogStream
+                  - sns:GetTopicAttributes
+                  - sns:ListSubscriptions
+                  - sns:ListSubscriptionsByTopic
+                  - sns:ListTopics
+                  - ssm:StartAutomationExecution
+                  - ssm:Describe*
+                  - ssm:List*
+                  - ssm:Get*
+                  - sts:GetCallerIdentity
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - ssm:SendCommand
+                Resource: 
+                  - "arn:aws:ec2:*:*:instance/*"
+                Condition:
+                  StringEquals:
+                    "ssm:resourceTag/StackName": !Ref AWS::StackName
+              - Effect: Allow
+                Action:
+                  - ssm:SendCommand
+                Resource:
+                  - "arn:aws:ssm:*:*:document/AWS-RunPowerShellScript"
+                  - "arn:aws:ssm:*:*:document/AWS-RunShellScript"
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                  - secretsmanager:DeleteSecret
+                Resource:
+                  - !Ref AdminPassword
+                  - !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${AWS::StackName}-domain-credentials-*"
+  
+  # Lambda function for hybrid assessment
+  HybridAssessmentFunction:
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: The lambda does not need to be deployed in a VPC
+          - id: W92
+            reason: This is for demo only. ReservedConcurrentExecutions can be ignored.
+    Type: AWS::Lambda::Function
+    DependsOn: DomainController2
+    Properties:
+      FunctionName: !Sub "${AWS::StackName}-hybrid-assessment"
+      Runtime: python3.11
+      Handler: index.lambda_handler
+      Role: !GetAtt HybridAssessmentLambdaRole.Arn
+      Timeout: 900
+      Layers:
+        - !Ref Boto3Layer
+      Code:
+        ZipFile: |
+          import json
+          import boto3
+          import cfnresponse
+          import logging
+          import time
+          
+          logger = logging.getLogger()
+          logger.setLevel(logging.INFO)
+          
+          def lambda_handler(event, context):
+              logger.info(f"Event: {json.dumps(event)}")
+              
+              try:
+                  ds_client = boto3.client('ds')
+                  
+                  if event['RequestType'] == 'Create':
+                      response = start_assessment(ds_client, event['ResourceProperties'])
+                      cfnresponse.send(event, context, cfnresponse.SUCCESS, response, response['AssessmentId'])
+                  
+                  elif event['RequestType'] in ['Update', 'Delete']:
+                      cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
+                      
+              except Exception as e:
+                  logger.error(f"Lambda handler error: {str(e)}")
+                  import traceback
+                  logger.error(f"Traceback: {traceback.format_exc()}")
+                  cfnresponse.send(event, context, cfnresponse.FAILED, {})
+          
+          def start_assessment(ds_client, properties):
+              logger.info("Starting AD Assessment with correct API structure")
+              
+              secret_arn = properties['SecretArn']
+              credentials = get_credentials_from_secret(secret_arn)
+              
+              # Build assessment configuration with correct structure
+              assessment_config = {
+                  'CustomerDnsIps': [
+                      properties['DomainController1IP'],
+                      properties['DomainController2IP']
+                  ],
+                  'DnsName': properties['DomainName'],
+                  'VpcSettings': {
+                      'VpcId': properties['VpcId'],
+                      'SubnetIds': [
+                          properties['SubnetId1'],
+                          properties['SubnetId2']
+                      ]
+                  },
+                  'InstanceIds': [
+                      properties['DomainController1InstanceId'],
+                      properties['DomainController2InstanceId']
+                  ]
+              }
+              
+              logger.info(f"Assessment config: {json.dumps(assessment_config)}")
+              
+              try:
+                  response = ds_client.start_ad_assessment(
+                      AssessmentConfiguration=assessment_config
+                  )
+                  
+                  assessment_id = response['AssessmentId']
+                  logger.info(f"Assessment started with ID: {assessment_id}")
+                  
+                  return {
+                      'AssessmentId': assessment_id,
+                      'Status': 'Started',
+                      'DomainName': properties['DomainName'],
+                      'DomainControllerIPs': [properties['DomainController1IP'], properties['DomainController2IP']],
+                      'InstanceIds': [properties['DomainController1InstanceId'], properties['DomainController2InstanceId']]
+                  }
+                  
+              except Exception as e:
+                  logger.error(f"Failed to start assessment: {str(e)}")
+                  return {
+                      'AssessmentId': 'failed',
+                      'Status': 'FAILED',
+                      'Error': str(e),
+                      'Message': 'Assessment failed to start'
+                  }
+          
+          def get_credentials_from_secret(secret_arn):
+              secrets_client = boto3.client('secretsmanager')
+              response = secrets_client.get_secret_value(SecretId=secret_arn)
+              return json.loads(response['SecretString'])
+
+  # Custom Resource for Assessment
+  HybridAssessmentResource:
+    Type: AWS::CloudFormation::CustomResource
+    DependsOn: DomainController2
+    Properties:
+      ServiceToken: !GetAtt HybridAssessmentFunction.Arn
+      SecretArn: !GetAtt DomainCredentialsSecret.SecretArn
+      DomainName: "onprem.com"
+      DomainController1IP: "10.0.3.10"
+      DomainController2IP: "10.0.4.10"
+      DomainController1InstanceId: !Ref DomainController1
+      DomainController2InstanceId: !Ref DomainController2
+      VpcId: !Ref VPC
+      SubnetId1: !Ref PublicSubnet1
+      SubnetId2: !Ref PublicSubnet2
+
+  # Lambda function to monitor assessment and create hybrid directory
+  HybridDirectoryFunction:
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: The lambda does not need to be deployed in a VPC
+          - id: W92
+            reason: This is for demo only. ReservedConcurrentExecutions can be ignored.
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "${AWS::StackName}-hybrid-directory"
+      Runtime: python3.11
+      Handler: index.lambda_handler
+      Role: !GetAtt HybridAssessmentLambdaRole.Arn
+      Timeout: 900
+      Layers:
+        - !Ref Boto3Layer
+      Code:
+        ZipFile: |
+          import json
+          import boto3
+          import cfnresponse
+          import logging
+          import time
+          
+          logger = logging.getLogger()
+          logger.setLevel(logging.INFO)
+          
+          def lambda_handler(event, context):
+              try:
+                  if event['RequestType'] == 'Create':
+                      ds_client = boto3.client('ds')
+                      assessment_id = event['ResourceProperties']['AssessmentId']
+                      secret_arn = event['ResourceProperties']['SecretArn']
+                      
+                      logger.info(f"Monitoring assessment: {assessment_id}")
+                      
+                      # Monitor for up to 30 minutes
+                      for i in range(60):
+                          response = ds_client.describe_ad_assessment(AssessmentId=assessment_id)
+                          status = response['Assessment']['Status']
+                          
+                          logger.info(f"Check {i+1}: Status = {status}")
+                          
+                          if status == 'SUCCESS':
+                              # Create hybrid directory
+                              hybrid_response = ds_client.create_hybrid_ad(
+                                  AssessmentId=assessment_id,
+                                  SecretArn=secret_arn
+                              )
+                              
+                              directory_id = hybrid_response['DirectoryId']
+                              logger.info(f"Hybrid directory created: {directory_id}")
+                              
+                              cfnresponse.send(event, context, cfnresponse.SUCCESS, 
+                                             {'DirectoryId': directory_id})
+                              return
+                              
+                          elif status == 'FAILURE':
+                              logger.error("Assessment failed")
+                              cfnresponse.send(event, context, cfnresponse.FAILED, 
+                                             {'Error': 'Assessment failed'})
+                              return
+                          
+                          time.sleep(30)
+                      
+                      # Timeout
+                      logger.error("Assessment timeout")
+                      cfnresponse.send(event, context, cfnresponse.FAILED, 
+                                     {'Error': 'Assessment timeout'})
+                  else:
+                      cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
+                      
+              except Exception as e:
+                  logger.error(f"Error: {str(e)}")
+                  cfnresponse.send(event, context, cfnresponse.FAILED, {'Error': str(e)})
+
+  # Custom Resource for Hybrid Directory Creation
+  HybridDirectoryResource:
+    Type: AWS::CloudFormation::CustomResource
+    DependsOn: HybridAssessmentResource
+    Properties:
+      ServiceToken: !GetAtt HybridDirectoryFunction.Arn
+      AssessmentId: !GetAtt HybridAssessmentResource.AssessmentId
+      SecretArn: !GetAtt DomainCredentialsSecret.SecretArn
+
+Outputs:
+  VPCId:
+    Description: VPC ID
+    Value: !Ref VPC
+    Export:
+      Name: !Sub "${AWS::StackName}-VPC-ID"
+
+  DomainName:
+    Description: Active Directory Domain Name
+    Value: onprem.com
+
+  AdminPasswordSecret:
+    Description: Secrets Manager ARN for Administrator password
+    Value: !Ref AdminPassword
+
+  DomainController1IP:
+    Description: Primary Domain Controller IP
+    Value: !GetAtt DomainController1.PrivateIp
+
+  DomainController2IP:
+    Description: Secondary Domain Controller IP
+    Value: !GetAtt DomainController2.PrivateIp
+
+  AssessmentId:
+    Description: "ID of the AD assessment"
+    Value: !GetAtt HybridAssessmentResource.AssessmentId
+  
+  AssessmentStatus:
+    Description: "Status of the AD assessment"
+    Value: !GetAtt HybridAssessmentResource.Status
+  
+  DirectoryId:
+    Description: "ID of the created Hybrid Directory"
+    Value: !GetAtt HybridDirectoryResource.DirectoryId
+  
+  DomainCredentialsSecret:
+    Description: "ARN of the domain credentials secret"
+    Value: !GetAtt DomainCredentialsSecret.SecretArn
