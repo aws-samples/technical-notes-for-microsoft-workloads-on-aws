@@ -12,11 +12,13 @@ You can deploy the [Hybrid Edition](https://docs.aws.amazon.com/directoryservice
 Read the official blog post for more details:
 https://aws.amazon.com/blogs/modernizing-with-aws/extend-your-active-directory-domain-to-aws-with-aws-managed-microsoft-ad-hybrid-edition/
 
-## Solution Overview
+## Solution overview
 The AWS CloudFormation template deploys the following:
 
-- A new self-managed AD forest (onpre.com) with two domain controllers in differents availability zones.
+- A new VPC with associated network resources like subnets, route tables, etc.
+- A new self-managed AD forest (onprem.com) with two domain controllers in differents availability zones.
 - Extends the self managed-AD domain to Hybrid Edition
+- Generates and stores the domain administrator credentials in [AWS Secrets Manager](https://console.aws.amazon.com/secretsmanager)
 - A security group allowing inbound traffic only from the VPC CIDR.
 
 Here is an architecture of what you get when you deploy the template.
@@ -27,7 +29,8 @@ Figure 1 - Deployment architecture
 
 Download the template from [this link.](https://github.com/aws-samples/technical-notes-for-microsoft-workloads-on-aws/blob/9831d577fd1df7f510c98656edc5cf3645c56641/docusaurus/docs/Active%20Directory/Guides/Automate%20deployment%20of%20your%20AWS%20Managed%20Microsoft%20AD%20Hybrid%20Edition/Scripts/buildbybrid.yml%E2%80%8E)
 
-After deployment, you must [modify the security group](https://console.aws.amazon.com/ec2/home#SecurityGroups:) to allow RDP access from your source IP address to the self-managed DCs on EC2. This allows you to review the domain structure using the Active Directory management tools. You should find that you have four domain controllers: two self-managed and two AWS managed DCs.
+## Review your deployment
+After deployment, [modify the security group](https://console.aws.amazon.com/ec2/home#SecurityGroups:) to allow RDP access from your source IP address to the self-managed DCs on EC2. You can also retrieve the Active Directory credentials from AWS Secrets Manager. This allows you to review the domain structure using the Active Directory management tools. You should find four domain controllers: two self-managed and two AWS managed DCs.
 
 You can verify this by running the following command in PowerShell:
 
