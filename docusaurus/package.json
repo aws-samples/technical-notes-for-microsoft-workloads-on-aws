@@ -69,7 +69,7 @@
     "immer": "^10.1.1",
     "jpegtran-bin": "^7.0.0",
     "loader-utils": "^3.3.1",
-    "lodash.template": "^4.5.0",
+    "lodash.template": "^4.18.1",
     "micromatch": "^4.0.8",
     "minimatch": "^10.2.3",
     "optipng-bin": "^9.0.0",
