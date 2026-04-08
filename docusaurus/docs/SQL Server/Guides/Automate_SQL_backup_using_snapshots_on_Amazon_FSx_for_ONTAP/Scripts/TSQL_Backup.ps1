@@ -59,7 +59,7 @@ if ($serverInstanceName -ne 'MSSQLSERVER') {
     $executableInstance = "$env:COMPUTERNAME\$serverInstanceName"
 }
 
-
+if ("TrustAllCertsPolicy" -as [type]) {} else { 
 Add-Type @"
 using System.Net;
 using System.Security.Cryptography.X509Certificates;
@@ -71,6 +71,7 @@ public class TrustAllCertsPolicy : ICertificatePolicy {
     }
 }
 "@
+}
 [System.Net.ServicePointManager]::CertificatePolicy = New-Object TrustAllCertsPolicy
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
@@ -83,7 +84,8 @@ Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\WinTrust
 #The solution is expecting that FSx credentials are saved in AWS SSM parameter store to have a safe and encrypted manner of passing credentials
 $SsmParameter = (Get-SSMParameter -Name "/tsql/filesystem/$FSxID" -WithDecryption $True).Value | Out-String | ConvertFrom-Json
 $FSxUserName = $SsmParameter.fsx.username
-$FSxPasswordSecureString =($SsmParameter.fsx.password | ConvertTo-SecureString -AsPlainText -Force)
+$FSxPassword = $SsmParameter.fsx.password
+$FSxPasswordSecureString = ConvertTo-SecureString $FSxPassword -AsPlainText -Force
 $FSxCredentials = New-Object System.Management.Automation.PSCredential($FSxUserName, $FSxPasswordSecureString)
 $FSxCredentialsInBase64 = [System.Convert]::ToBase64String([System.Text.Encoding]::ASCII.GetBytes($FSxUserName + ':' + $FSxPassword))
 $FSxHostName = "management.$FSxID.fsx.$FSxRegion.amazonaws.com"
@@ -143,10 +145,18 @@ if (-not ([string]::IsNullOrEmpty($body))) {
 
 if ($isprivatesubnet -eq $False -and $regionCertificate -ne $null) {
     try {
-    return Invoke-RestMethod @Params -Certificate $regionCertificate
-    } catch { Write-Host "Failed to execute ONTAP REST command $_"}
+        return Invoke-RestMethod @Params -Certificate $regionCertificate
+    } catch {
+        Write-Host "Failed to execute ONTAP REST command: $_"
+        throw
+    }
 } else {
-    return Invoke-RestMethod @Params
+    try {
+        return Invoke-RestMethod @Params
+    } catch {
+        Write-Host "Failed to execute ONTAP REST command: $_"
+        throw
+    }
 }
 }
 
@@ -374,10 +384,34 @@ Function Suspend-DatabasesForSnapshot {
 
          }
 
+Function Get-ONTAPJobStatus($jobUUID) {
+        $Params = @{
+            "ApiEndPoint" = "/cluster/jobs/$jobUUID"
+            "method" = "GET"
+        }
+        return Invoke-ONTAPRequest @Params
+    }
+
+Function Wait-ForONTAPJob($jobUUID, $timeout) {
+        $elapsed = 0
+        $pollInterval = 5
+        while ($elapsed -lt $timeout) {
+            $jobStatus = Get-ONTAPJobStatus $jobUUID
+            Write-Output "Job $jobUUID state: $($jobStatus.state)"
+            if ($jobStatus.state -eq 'success') {
+                return $jobStatus
+            }
+            if ($jobStatus.state -eq 'failure') {
+                throw "ONTAP job $jobUUID failed: $($jobStatus.message)"
+            }
+            Start-Sleep -Seconds $pollInterval
+            $elapsed += $pollInterval
+        }
+        throw "ONTAP job $jobUUID did not complete within $timeout seconds"
+    }
+
 Function Create-ONTAPSnapshot($volumeUUID,$volumeName,$snapshot,$timeout) {
         Write-Host "Creating snapshot $snapshot on the volume $volumeName "
-  
-        
 
         $Params = @{
             "ApiEndPoint" = "/storage/volumes/$volumeUUID/snapshots"
@@ -390,12 +424,48 @@ Function Create-ONTAPSnapshot($volumeUUID,$volumeName,$snapshot,$timeout) {
             }
         }
 
-            
-            Write-output $Params
-            $Response = Invoke-ONTAPRequest @Params
-            Write-output $Response
-            return($Response)
+        Write-output $Params
+        $Response = Invoke-ONTAPRequest @Params
 
+        if ($null -eq $Response) {
+            throw "Snapshot API returned null response for volume $volumeName"
+        }
+
+        if ($Response.job -ne $null) {
+            Write-Output "Snapshot returned async job $($Response.job.uuid) - polling for completion"
+            $jobResult = Wait-ForONTAPJob $Response.job.uuid $timeout
+            Write-Output "Snapshot job completed successfully for volume $volumeName"
+        }
+
+        if ($Response.records -ne $null -and $Response.records.Count -gt 0) {
+            Write-Output "Snapshot $snapshot created successfully on volume $volumeName"
+        }
+
+        Write-output $Response
+        return($Response)
+    }
+
+Function Delete-ONTAPSnapshot($volumeUUID, $volumeName, $snapshotName) {
+        Write-Host "Cleaning up snapshot $snapshotName on volume $volumeName"
+        try {
+            $listParams = @{
+                "ApiEndPoint" = "/storage/volumes/$volumeUUID/snapshots"
+                "method" = "GET"
+                "ApiQueryFilter" = "name=$snapshotName"
+            }
+            $listResponse = Invoke-ONTAPRequest @listParams
+            if ($listResponse.records -ne $null -and $listResponse.records.Count -gt 0) {
+                $snapshotUUID = $listResponse.records[0].uuid
+                $deleteParams = @{
+                    "ApiEndPoint" = "/storage/volumes/$volumeUUID/snapshots/$snapshotUUID"
+                    "method" = "DELETE"
+                }
+                Invoke-ONTAPRequest @deleteParams | Out-Null
+                Write-Host "Cleaned up snapshot $snapshotName on volume $volumeName"
+            }
+        } catch {
+            Write-Warning "Failed to clean up snapshot $snapshotName on volume $volumeName : $_"
+        }
     }
 
 $instanceRespones = @{}
@@ -521,21 +591,32 @@ if(-not ([string]::IsNullOrEmpty($databaseName))) {
 
      #Create snapshot for all the volumes
      $timestamp = (Get-Date -Format "yyyyMMddHHmmss")
-
+     $snapshot = $snapshot_prefix+"_"+$timestamp
+     $completedSnapshots = @()
 
      foreach ($record in $volumes.records) {
            $volumeUUID = $record.uuid
            $volumeName = $record.name
            Write-output "Taking snapshot for $volumeName ($volumeUUID)"
-           $snapshot = $snapshot_prefix+"_"+$timestamp
            try {
                 $snapshotResult = Create-ONTAPSnapshot $volumeUUID $volumeName $snapshot $snapshot_timeout
+                $completedSnapshots += @{ "uuid" = $volumeUUID; "name" = $volumeName }
             } catch {
-                Write-Output "Snapshot failed for volume $volumeName. Aborting backup and resuming database(s)"
+                Write-Output "Snapshot failed for volume $volumeName. Aborting backup and resuming database(s). Error: $_"
+
+                foreach ($completed in $completedSnapshots) {
+                    Delete-ONTAPSnapshot $completed.uuid $completed.name $snapshot
+                }
+
                 $SQLParams["Action"] = "resume"
                 Suspend-DatabasesForSnapshot @SQLParams
-                exit 1
 
+                if ($sqlConn.State -eq [System.Data.ConnectionState]::Open) {
+                    $sqlConn.Close()
+                }
+                $sqlConn.Dispose()
+                $Command.Dispose()
+                throw "Snapshot failed for volume $volumeName. Retry backup after sometime."
             }
 
         }
@@ -562,15 +643,16 @@ if(-not ([string]::IsNullOrEmpty($databaseName))) {
           Suspend-DatabasesForSnapshot @SQLParams
 
           if ($sqlConn.State -eq [System.Data.ConnectionState]::Open) {
-                        $sqlConn.Close()
-                     }
-                    # Dispose of the connection and command objects
-                    $sqlConn.Dispose()
-                    $Command.Dispose()
+              $sqlConn.Close()
+          }
+          $sqlConn.Dispose()
+          $Command.Dispose()
+          throw "Metadata backup failed for $databaseName. Snapshot $snapshot exists but backup is incomplete. Retry after sometime."
     }
 
-
-    $sqlConn.Close()
+    if ($sqlConn.State -eq [System.Data.ConnectionState]::Open) {
+        $sqlConn.Close()
+    }
     $sqlConn.Dispose()
     $Command.Dispose()
 
@@ -589,4 +671,3 @@ return
 } catch {
 return $_.Exception.Message
 } 
- 
