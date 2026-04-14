@@ -116,6 +116,9 @@
     "uuid": "^11.1.0",
     "webpack-dev-server": "^5.2.2"
   },
+  "overrides": {
+    "webpack": "~5.97.0"
+  },
   "devDependencies": {
     "@docusaurus/module-type-aliases": "^3.9.2",
     "@docusaurus/types": "^3.9.2",
