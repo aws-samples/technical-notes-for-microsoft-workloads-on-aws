@@ -155,5 +155,5 @@ Only notes that apply to instances in the output are shown in the legend.
 
 ## Author
 
-Craig Cooley (coolcrai@amazon.com) — March 2026
+Craig Cooley — March 2026
 Built with [Kiro](https://kiro.dev) IDE + Claude Opus 4.6
