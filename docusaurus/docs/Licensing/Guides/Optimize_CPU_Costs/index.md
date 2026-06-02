@@ -1,7 +1,7 @@
 ---
 sidebar_position: 4
 title: Optimize CPU Costs for Windows Licensing
-description: Reduce Microsoft license included costs on EC2 by adjusting ThreadsPerCore settings
+description: Reduce Microsoft license included costs on EC2 by adjusting [ThreadsPerCore](https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_CpuOptionsRequest.html) settings
 ---
 
 # Optimize CPU Costs for Windows Licensing
@@ -10,10 +10,10 @@ Reduce Microsoft licensing costs on Amazon EC2 and SQL Server instances by disab
 
 ## Why This Matters
 
-Windows Server and SQL Server are licensed **per active vCPU** on AWS. By default, most EC2 instance types have 2 VCPUs per physical core (hyperthreading). If your workload doesn't benefit from hyperthreading, you're paying for twice the licensing you need.
+Windows Server and SQL Server are licensed **per active vCPU** on AWS. By default, most EC2 instance types have 2 vCPUs per physical core (hyperthreading). If your workload doesn't benefit from hyperthreading, you're paying for twice the licensing you need.
 
 Setting `ThreadsPerCore = 1`:
-- **Halves your Windows/SQL licensing cost** (License Included pricing is per active vCPU)
+- **Halves your Windows/SQL licensing cost** (AWS License Included pricing is per active vCPU)
 - Does not affect the compute cost — only the license component
 - see [Optimize CPUs for License-Included instances](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/optimize-cpu.html) for details
 
@@ -33,12 +33,6 @@ The scripts in the [Scripts](./Scripts/) folder demonstrate cost savings across 
 - AWS.Tools.EC2 and AWS.Tools.Pricing modules (pre-installed in AWS CloudShell)
 - AWS credentials with EC2 and Pricing API permissions
 
-### Quick Start (AWS CloudShell)
-
-```powershell
-pwsh
-.\Show-OptimizedCpuCost.ps1 -InstanceType m8i.4xlarge -Region us-east-1
-```
 
 ## How ThreadsPerCore Works
 
@@ -57,6 +51,7 @@ This launches with 8 cores × 1 thread = 8 vCPUs instead of the default 8 cores 
 - **EC2 Windows** — Windows Server License Included instances
 - **SQL Server on EC2** — SQL Server License Included instances 
 - **RDS for SQL Server** — Latest RDS instance have `ThreadsPerCore = 1` by default
+  
 ## Author
 
 Craig Cooley (coolcrai@) — Built with Kiro IDE
