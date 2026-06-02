@@ -15,24 +15,24 @@ It also identifies:
 - Instances that don't use SMT, such as AMD or T2 (no savings possible)
 - SQL Server instances subject to the 4-vCPU minimum billing
 
-## Getting started
-
-1. Sign in to the AWS Console
-2. Download the [Show-AccountCpuOptimization.ps1](https://github.com/aws-samples/technical-notes-for-microsoft-workloads-on-aws/blob/2ebc1a9e4db9b9e311f5b60e152b7f38810dd840/docusaurus/docs/Licensing/Guides/Optimize_CPU_Costs/Scripts/CPUOptimizationCalc/Show-AccountCpuOptimization.ps1) script to your desktop.
-3. Open [CloudShell](https://us-east-2.console.aws.amazon.com/cloudshell/home)
-4. [Upload the script](https://docs.aws.amazon.com/cloudshell/latest/userguide/getting-started.html#folder-upload)
-5. Run:
-
-```powershell
-pwsh
-.\Show-AccountCpuOptimization.ps1
-```
-
 ## Requirements
 
 - PowerShell 7+ (pre-installed in CloudShell)
 - AWS Tools for PowerShell: `AWS.Tools.EC2`, `AWS.Tools.Pricing` (pre-installed in CloudShell)
 - IAM permissions: `ec2:DescribeInstances`, `ec2:DescribeInstanceTypes`, `ec2:DescribeRegions`, `pricing:GetProducts`
+
+## Getting started
+
+1. Download the [Show-AccountCpuOptimization.ps1](https://github.com/aws-samples/technical-notes-for-microsoft-workloads-on-aws/blob/2ebc1a9e4db9b9e311f5b60e152b7f38810dd840/docusaurus/docs/Licensing/Guides/Optimize_CPU_Costs/Scripts/CPUOptimizationCalc/Show-AccountCpuOptimization.ps1) script to your desktop.
+2. Sign in to the AWS Console
+3. Open [CloudShell](https://console.aws.amazon.com/cloudshell/home)
+4. [Upload the script](https://docs.aws.amazon.com/cloudshell/latest/userguide/getting-started.html#folder-upload)
+5. Run `pwsh`
+
+```powershell
+pwsh
+.\Show-AccountCpuOptimization.ps1
+```
 
 ## Usage
 
