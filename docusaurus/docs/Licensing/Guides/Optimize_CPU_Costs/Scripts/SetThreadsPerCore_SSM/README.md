@@ -157,5 +157,5 @@ When an instance is skipped, the automation ends with a descriptive step name:
 
 ## Author
 
-Craig Cooley (coolcrai@amazon.com) — May 2026
+Craig Cooley — May 2026
 Built with [Kiro](https://kiro.dev) IDE + Claude Opus 4.6
