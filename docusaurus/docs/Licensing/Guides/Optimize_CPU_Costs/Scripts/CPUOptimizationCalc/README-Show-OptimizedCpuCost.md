@@ -24,15 +24,6 @@ When you launch a Windows or Windows+SQL Server license-included EC2 instance wi
 
 With ThreadsPerCore = 1, active vCPUs = number of physical cores (half the default vCPU count on instances that use SMT/hyperthreading). This reduces the license portion of the bill.
 
-### Per-vCPU license rates
-
-| License                            | Rate            |
-|------------------------------------|-----------------|
-| Windows Server                     | $0.046/vCPU-hr  |
-| Windows + SQL Server Web           | $0.063/vCPU-hr  |
-| Windows + SQL Server Standard      | $0.166/vCPU-hr  |
-| Windows + SQL Server Enterprise    | $0.421/vCPU-hr  |
-
 Instances that don't use SMT by default (e.g. AMD r8a) will show 0% savings since they already run 1 thread per core.
 
 ## Getting started
@@ -42,24 +33,16 @@ The easiest way to run this script is from [AWS CloudShell](https://docs.aws.ama
 1. Sign in to the AWS Console
 2. Open [CloudShell](https://us-east-2.console.aws.amazon.com/cloudshell/home)
 3. [Upload the script file](https://docs.aws.amazon.com/cloudshell/latest/userguide/getting-started.html#folder-upload)
-4. Start PowerShell and run:
+4. Run `pwsh`
 
-```powershell
-pwsh
-.\Show-OptimizedCpuCost.ps1
-```
 
 ## Requirements
 
-- PowerShell 7+
-- AWS Tools for PowerShell modules:
+- PowerShell 7+  (preinstalled in CloudShell)
+- AWS Tools for PowerShell modules:  (all preinstalled in CloudShell)
   - `AWS.Tools.EC2`
   - `AWS.Tools.Pricing`
 - Valid AWS credentials with `ec2:DescribeInstanceTypes` and `pricing:GetProducts` permissions
-
-```powershell
-Install-Module AWS.Tools.EC2, AWS.Tools.Pricing -Scope CurrentUser
-```
 
 ## Usage
 
