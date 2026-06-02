@@ -1,0 +1,406 @@
+description: |
+  Sets ThreadsPerCore on an EC2 instance to disable SMT (Simultaneous Multithreading).
+  This can reduce Windows and SQL Server license-included costs by reducing the active vCPU count.
+
+  The document modifies the instance's CPU options to set ThreadsPerCore=1 while keeping
+  all physical cores active. The instance must be stopped to modify CPU options.
+
+  For running instances, set StopStartedInstances to 'yes' to automatically stop,
+  modify, and restart the instance.
+
+  Author: Craig Cooley (coolcrai@amazon.com)
+  Built with: Kiro IDE + Claude Opus 4.6
+  Date: May 2026
+
+schemaVersion: '0.3'
+assumeRole: ''
+parameters:
+  InstanceId:
+    type: String
+    description: The EC2 instance ID to modify.
+  ThreadsPerCore:
+    type: Integer
+    default: 1
+    description: Threads per core to set. Use 1 to disable SMT.
+    allowedValues:
+      - 1
+      - 2
+  StopStartedInstances:
+    type: String
+    default: 'no'
+    description: >-
+      If 'yes', running instances will be stopped, modified, and restarted.
+      If 'no', running instances are skipped.
+    allowedValues:
+      - 'yes'
+      - 'no'
+  SkipPublicIP:
+    type: String
+    default: 'yes'
+    description: >-
+      If 'yes', skip running instances that have a non-EIP public IP address
+      (the IP will change on stop/start).
+    allowedValues:
+      - 'yes'
+      - 'no'
+  Platform:
+    type: String
+    default: 'Windows'
+    description: >-
+      Platform filter: 'Windows' only modifies Windows instances, 'Linux' only Linux,
+      'All' modifies any platform.
+    allowedValues:
+      - 'Windows'
+      - 'Linux'
+      - 'All'
+  SkipInstanceStore:
+    type: String
+    default: 'yes'
+    description: >-
+      If 'yes', skip running instances on instance types with instance store
+      (ephemeral data is lost on stop).
+    allowedValues:
+      - 'yes'
+      - 'no'
+  CoreCount:
+    type: String
+    default: 'current'
+    description: >-
+      Core count to set. 'default' uses the instance type's default core count
+      (all physical cores). 'current' keeps the instance's current core count.
+    allowedValues:
+      - 'default'
+      - 'current'
+
+mainSteps:
+  - name: GetInstanceDetails
+    action: aws:executeAwsApi
+    inputs:
+      Service: ec2
+      Api: DescribeInstances
+      InstanceIds:
+        - '{{ InstanceId }}'
+    outputs:
+      - Name: InstanceState
+        Selector: $.Reservations[0].Instances[0].State.Name
+        Type: String
+      - Name: InstanceType
+        Selector: $.Reservations[0].Instances[0].InstanceType
+        Type: String
+      - Name: CurrentCoreCount
+        Selector: $.Reservations[0].Instances[0].CpuOptions.CoreCount
+        Type: Integer
+      - Name: CurrentThreadsPerCore
+        Selector: $.Reservations[0].Instances[0].CpuOptions.ThreadsPerCore
+        Type: Integer
+      - Name: Platform
+        Selector: $.Reservations[0].Instances[0].Platform
+        Type: String
+
+  - name: GetInstanceTypeInfo
+    action: aws:executeAwsApi
+    inputs:
+      Service: ec2
+      Api: DescribeInstanceTypes
+      InstanceTypes:
+        - '{{ GetInstanceDetails.InstanceType }}'
+    outputs:
+      - Name: DefaultCores
+        Selector: $.InstanceTypes[0].VCpuInfo.DefaultCores
+        Type: Integer
+      - Name: DefaultThreadsPerCore
+        Selector: $.InstanceTypes[0].VCpuInfo.DefaultThreadsPerCore
+        Type: Integer
+      - Name: InstanceStorageSupported
+        Selector: $.InstanceTypes[0].InstanceStorageSupported
+        Type: Boolean
+      - Name: BareMetal
+        Selector: $.InstanceTypes[0].BareMetal
+        Type: Boolean
+
+  - name: CheckBareMetal
+    action: aws:branch
+    inputs:
+      Choices:
+        - NextStep: SkippedBareMetal
+          Variable: '{{ GetInstanceTypeInfo.BareMetal }}'
+          BooleanEquals: true
+      Default: CheckPlatform
+
+  - name: SkippedBareMetal
+    action: aws:sleep
+    inputs:
+      Duration: PT0S
+    isEnd: true
+    description: Instance is bare metal. Optimize CPUs is not supported. Skipping.
+
+  - name: CheckPlatform
+    action: aws:branch
+    inputs:
+      Choices:
+        - NextStep: CheckValidTPC
+          Variable: '{{ Platform }}'
+          StringEquals: 'All'
+        - NextStep: BranchPlatformWindows
+          Variable: '{{ Platform }}'
+          StringEquals: 'Windows'
+        - NextStep: BranchPlatformLinux
+          Variable: '{{ Platform }}'
+          StringEquals: 'Linux'
+      Default: SkippedNonWindows
+
+  - name: BranchPlatformWindows
+    action: aws:branch
+    inputs:
+      Choices:
+        - NextStep: CheckValidTPC
+          Variable: '{{ GetInstanceDetails.Platform }}'
+          StringEquals: windows
+      Default: SkippedNonWindows
+
+  - name: BranchPlatformLinux
+    action: aws:branch
+    inputs:
+      Choices:
+        - NextStep: SkippedNonWindows
+          Variable: '{{ GetInstanceDetails.Platform }}'
+          StringEquals: windows
+      Default: CheckValidTPC
+
+  - name: SkippedNonWindows
+    action: aws:sleep
+    inputs:
+      Duration: PT0S
+    isEnd: true
+    description: Instance platform does not match the Platform parameter. Skipping.
+
+  - name: CheckValidTPC
+    action: aws:branch
+    inputs:
+      Choices:
+        - NextStep: CheckAlreadyConfigured
+          Variable: '{{ GetInstanceTypeInfo.DefaultThreadsPerCore }}'
+          NumericGreaterOrEquals: '{{ ThreadsPerCore }}'
+      Default: SkippedUnsupportedTPC
+
+  - name: SkippedUnsupportedTPC
+    action: aws:sleep
+    inputs:
+      Duration: PT0S
+    isEnd: true
+    description: Requested ThreadsPerCore is not supported by this instance type. Skipping.
+
+  - name: CheckAlreadyConfigured
+    action: aws:branch
+    inputs:
+      Choices:
+        - NextStep: AlreadyConfigured
+          Variable: '{{ GetInstanceDetails.CurrentThreadsPerCore }}'
+          NumericEquals: '{{ ThreadsPerCore }}'
+      Default: CheckInstanceState
+
+  - name: AlreadyConfigured
+    action: aws:sleep
+    inputs:
+      Duration: PT0S
+    isEnd: true
+    description: Instance already has the requested ThreadsPerCore. No action needed.
+
+  - name: CheckInstanceState
+    action: aws:branch
+    inputs:
+      Choices:
+        - NextStep: BranchCoreCount
+          Variable: '{{ GetInstanceDetails.InstanceState }}'
+          StringEquals: stopped
+        - NextStep: CheckStopStartedParam
+          Variable: '{{ GetInstanceDetails.InstanceState }}'
+          StringEquals: running
+      Default: SkippedUnsupportedState
+
+  - name: SkippedUnsupportedState
+    action: aws:sleep
+    inputs:
+      Duration: PT0S
+    isEnd: true
+    description: Instance is in an unsupported state (not running or stopped). Skipping.
+
+  - name: CheckStopStartedParam
+    action: aws:branch
+    inputs:
+      Choices:
+        - NextStep: CheckASGMembership
+          Variable: '{{ StopStartedInstances }}'
+          StringEquals: 'yes'
+      Default: SkippedRunning
+
+  - name: SkippedRunning
+    action: aws:sleep
+    inputs:
+      Duration: PT0S
+    isEnd: true
+    description: Instance is running and StopStartedInstances is 'no'. Skipping.
+
+  - name: CheckASGMembership
+    action: aws:executeAwsApi
+    inputs:
+      Service: autoscaling
+      Api: DescribeAutoScalingInstances
+      InstanceIds:
+        - '{{ InstanceId }}'
+    outputs:
+      - Name: ASGInstanceId
+        Selector: $.AutoScalingInstances[0].InstanceId
+        Type: String
+    description: >-
+      Check if instance is managed by an Auto Scaling group.
+      If this API call fails (permissions, throttling), the automation aborts (fail-safe).
+      If the instance is not in an ASG, the selector returns empty string.
+
+  - name: BranchASGResult
+    action: aws:branch
+    inputs:
+      Choices:
+        - NextStep: SkippedASG
+          Variable: '{{ CheckASGMembership.ASGInstanceId }}'
+          StringEquals: '{{ InstanceId }}'
+      Default: CheckInstanceStoreParam
+
+  - name: SkippedASG
+    action: aws:sleep
+    inputs:
+      Duration: PT0S
+    isEnd: true
+    description: Instance is in an Auto Scaling group. Skipping.
+
+  - name: CheckInstanceStoreParam
+    action: aws:branch
+    inputs:
+      Choices:
+        - NextStep: BranchInstanceStore
+          Variable: '{{ SkipInstanceStore }}'
+          StringEquals: 'yes'
+      Default: CheckPublicIP
+
+  - name: BranchInstanceStore
+    action: aws:branch
+    inputs:
+      Choices:
+        - NextStep: SkippedInstanceStore
+          Variable: '{{ GetInstanceTypeInfo.InstanceStorageSupported }}'
+          BooleanEquals: true
+      Default: CheckPublicIP
+
+  - name: SkippedInstanceStore
+    action: aws:sleep
+    inputs:
+      Duration: PT0S
+    isEnd: true
+    description: Instance type has instance store and SkipInstanceStore is 'yes'. Skipping.
+
+  - name: CheckPublicIP
+    action: aws:branch
+    inputs:
+      Choices:
+        - NextStep: VerifyPublicIP
+          Variable: '{{ SkipPublicIP }}'
+          StringEquals: 'yes'
+      Default: StopInstance
+
+  - name: VerifyPublicIP
+    action: aws:executeAwsApi
+    inputs:
+      Service: ec2
+      Api: DescribeNetworkInterfaces
+      Filters:
+        - Name: attachment.instance-id
+          Values:
+            - '{{ InstanceId }}'
+    outputs:
+      - Name: IpOwnerId
+        Selector: $.NetworkInterfaces[0].Association.IpOwnerId
+        Type: String
+    description: >-
+      Check who owns the public IP on the primary ENI.
+      'amazon' = auto-assigned (will change on stop/start).
+      Account ID = EIP (safe). Empty = no public IP (safe).
+
+  - name: BranchPublicIPOwner
+    action: aws:branch
+    inputs:
+      Choices:
+        - NextStep: SkippedPublicIP
+          Variable: '{{ VerifyPublicIP.IpOwnerId }}'
+          StringEquals: amazon
+      Default: StopInstance
+
+  - name: SkippedPublicIP
+    action: aws:sleep
+    inputs:
+      Duration: PT0S
+    isEnd: true
+    description: Instance has a non-EIP public IP and SkipPublicIP is 'yes'. Skipping.
+
+  - name: StopInstance
+    action: aws:changeInstanceState
+    inputs:
+      InstanceIds:
+        - '{{ InstanceId }}'
+      DesiredState: stopped
+    description: Stopping the running instance to modify CPU options.
+
+  - name: BranchCoreCount
+    action: aws:branch
+    inputs:
+      Choices:
+        - NextStep: ModifyCpuOptionsCurrent
+          Variable: '{{ CoreCount }}'
+          StringEquals: 'current'
+      Default: ModifyCpuOptionsDefault
+
+  - name: ModifyCpuOptionsDefault
+    action: aws:executeAwsApi
+    inputs:
+      Service: ec2
+      Api: ModifyInstanceCpuOptions
+      InstanceId: '{{ InstanceId }}'
+      CoreCount: '{{ GetInstanceTypeInfo.DefaultCores }}'
+      ThreadsPerCore: '{{ ThreadsPerCore }}'
+    description: Setting ThreadsPerCore with instance type default cores.
+    nextStep: CheckShouldRestart
+
+  - name: ModifyCpuOptionsCurrent
+    action: aws:executeAwsApi
+    inputs:
+      Service: ec2
+      Api: ModifyInstanceCpuOptions
+      InstanceId: '{{ InstanceId }}'
+      CoreCount: '{{ GetInstanceDetails.CurrentCoreCount }}'
+      ThreadsPerCore: '{{ ThreadsPerCore }}'
+    description: Setting ThreadsPerCore with current core count preserved.
+    nextStep: CheckShouldRestart
+
+  - name: CheckShouldRestart
+    action: aws:branch
+    inputs:
+      Choices:
+        - NextStep: StartInstance
+          Variable: '{{ GetInstanceDetails.InstanceState }}'
+          StringEquals: running
+      Default: CompleteStopped
+
+  - name: StartInstance
+    action: aws:changeInstanceState
+    inputs:
+      InstanceIds:
+        - '{{ InstanceId }}'
+      DesiredState: running
+    description: Restarting the instance after CPU modification.
+    isEnd: true
+
+  - name: CompleteStopped
+    action: aws:sleep
+    inputs:
+      Duration: PT0S
+    isEnd: true
+    description: Instance was already stopped. CPU options modified. Not restarting.
