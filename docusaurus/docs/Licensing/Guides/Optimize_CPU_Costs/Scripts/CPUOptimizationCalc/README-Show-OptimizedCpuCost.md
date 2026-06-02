@@ -38,7 +38,7 @@ Instances that don't use SMT by default (e.g. AMD r8a) will show 0% savings sinc
 
 The easiest way to run this script is from [AWS CloudShell](https://docs.aws.amazon.com/cloudshell/latest/userguide/welcome.html), which comes with PowerShell and AWS modules pre-installed, and credentials are automatically configured.
 
-1. Download the [Show-OptimizedCpuCost.ps1](https://github.com/aws-samples/technical-notes-for-microsoft-workloads-on-aws/blob/2ebc1a9e4db9b9e311f5b60e152b7f38810dd840/docusaurus/docs/Licensing/Guides/Optimize_CPU_Costs/Scripts/CPUOptimizationCalc/Show-OptimizedCpuCost.ps1) script from github.
+1. Download the [Show-OptimizedCpuCost.ps1](https://github.com/aws-samples/technical-notes-for-microsoft-workloads-on-aws/blob/2ebc1a9e4db9b9e311f5b60e152b7f38810dd840/docusaurus/docs/Licensing/Guides/Optimize_CPU_Costs/Scripts/CPUOptimizationCalc/Show-OptimizedCpuCost.ps1) script to you desktop.
 2. Sign in to the AWS Console
 3. Open [CloudShell](https://console.aws.amazon.com/cloudshell/home)
 4. [Upload the script file](https://docs.aws.amazon.com/cloudshell/latest/userguide/getting-started.html#folder-upload)
