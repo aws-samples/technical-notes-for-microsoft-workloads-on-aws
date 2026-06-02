@@ -19,7 +19,7 @@ Setting `ThreadsPerCore = 1`:
 
 ## Scripts
 
-The 2 PowerShell scripts in the [Scripts](./Scripts/) folder demonstrate cost savings across instance types by querying the AWS Pricing API and comparing License costs with and without hyperthreading.  The SSM Automation (Set-ThreadsPerCore.yaml) can be used to configure `ThreadsPerCore = 1` on multiple instances at once.  Individual instances can be confugired from the AWS console or Command Line.  
+The 2 PowerShell scripts in the [Scripts](./Scripts/) folder demonstrate cost savings across instance types by querying the AWS Pricing API and comparing License costs with and without hyperthreading.  The SSM Automation (Set-ThreadsPerCore.yaml) can be used to configure `ThreadsPerCore = 1` on multiple instances at once.  Individual instances can be configured from the AWS console or Command Line.  
 
 | Script | Description |
 |--------|-------------
