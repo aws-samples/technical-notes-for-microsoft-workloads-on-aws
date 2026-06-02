@@ -167,5 +167,5 @@ Only notes that apply to instances in the scan are shown in the output legend.
 
 ## Author
 
-Craig Cooley (coolcrai@amazon.com) — February 2026
+Craig Cooley — February 2026
 Built with [Kiro](https://kiro.dev) IDE + Claude Opus 4.6
