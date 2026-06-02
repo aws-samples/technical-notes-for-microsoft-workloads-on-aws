@@ -22,7 +22,7 @@ Setting `ThreadsPerCore = 1`:
 The scripts in the [Scripts](./Scripts/) folder demonstrate cost savings across instance types by querying the AWS Pricing API and comparing License Included costs with and without hyperthreading.
 
 | Script | Description |
-|--------|-------------|
+|--------|-------------
 | `Show-OptimizedCpuCost.ps1` | Shows per-instance cost savings when setting [ThreadsPerCore](https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_CpuOptionsRequest.html)=1 |
 | `Show-AccountCpuOptimization.ps1` | Scans instances in your account and shows optimization opportunities |
 | `Set-ThreadsPerCore.yaml` | SSM Automation document to set [ThreadsPerCore](https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_CpuOptionsRequest.html) on existing instances |
@@ -55,3 +55,4 @@ This launches with 8 cores × 1 thread = 8 vCPUs instead of the default 8 cores 
 ## Author
 
 Craig Cooley (coolcrai@) — Built with Kiro IDE
+description: Reduce Microsoft license included costs on EC2 by adjusting ThreadsPerCore settings
