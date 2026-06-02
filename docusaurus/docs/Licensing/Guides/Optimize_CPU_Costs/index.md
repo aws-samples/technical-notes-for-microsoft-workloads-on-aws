@@ -1,7 +1,7 @@
 ---
 sidebar_position: 4
 title: Optimize CPU Costs for Windows Licensing
-description: Reduce Microsoft license included costs on EC2 by adjusting [ThreadsPerCore](https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_CpuOptionsRequest.html) settings
+description: Reduce Microsoft license included costs on EC2 by adjusting ThreadsPerCore settings
 ---
 
 # Optimize CPU Costs for Windows Licensing
