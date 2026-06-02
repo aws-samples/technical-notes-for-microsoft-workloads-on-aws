@@ -23,9 +23,9 @@ The scripts in the [Scripts](./Scripts/) folder demonstrate cost savings across 
 
 | Script | Description |
 |--------|-------------|
-| `Show-OptimizedCpuCost.ps1` | Shows per-instance cost savings when disabling hyperthreading |
+| `Show-OptimizedCpuCost.ps1` | Shows per-instance cost savings when setting [ThreadsPerCore](https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_CpuOptionsRequest.html)=1 |
 | `Show-AccountCpuOptimization.ps1` | Scans instances in your account and shows optimization opportunities |
-| `Set-ThreadsPerCore.yaml` | SSM Automation document to set ThreadsPerCore on existing instances |
+| `Set-ThreadsPerCore.yaml` | SSM Automation document to set [ThreadsPerCore](https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_CpuOptionsRequest.html) on existing instances |
 
 ### Requirements
 
