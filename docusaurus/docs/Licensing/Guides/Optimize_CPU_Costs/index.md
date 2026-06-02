@@ -50,9 +50,7 @@ This launches with 8 cores × 1 thread = 8 vCPUs instead of the default 8 cores 
 
 - **EC2 Windows** — Windows Server License Included instances
 - **SQL Server on EC2** — SQL Server License Included instances 
-- **RDS for SQL Server** — Latest RDS instance have `ThreadsPerCore = 1` by default
+- **RDS for SQL Server** — Latest RDS instance have `ThreadsPerCore = 1` set by default
   
 ## Author
-
 Craig Cooley (coolcrai@) — Built with Kiro IDE
-description: Reduce Microsoft license included costs on EC2 by adjusting ThreadsPerCore settings
