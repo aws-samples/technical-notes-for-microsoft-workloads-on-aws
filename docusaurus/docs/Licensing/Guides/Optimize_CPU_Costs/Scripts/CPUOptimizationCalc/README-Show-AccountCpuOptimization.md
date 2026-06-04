@@ -23,7 +23,7 @@ It also identifies:
 
 ## Getting started
 
-1. Download the [Show-AccountCpuOptimization.ps1](https://github.com/aws-samples/technical-notes-for-microsoft-workloads-on-aws/blob/2ebc1a9e4db9b9e311f5b60e152b7f38810dd840/docusaurus/docs/Licensing/Guides/Optimize_CPU_Costs/Scripts/CPUOptimizationCalc/Show-AccountCpuOptimization.ps1) script to your desktop.
+1. Download the [Show-AccountCpuOptimization.ps1](https://github.com/aws-samples/technical-notes-for-microsoft-workloads-on-aws/blob/main/docusaurus/docs/Licensing/Guides/Optimize_CPU_Costs/Scripts/CPUOptimizationCalc/Show-AccountCpuOptimization.ps1) script to your desktop.
 2. Sign in to the AWS Console
 3. Open [CloudShell](https://console.aws.amazon.com/cloudshell/home)
 4. [Upload the script](https://docs.aws.amazon.com/cloudshell/latest/userguide/getting-started.html#folder-upload)
