@@ -20,11 +20,11 @@ The document includes several pre-flight checks that **fail safe** — if an API
 | Check | Default | Behavior |
 |---|---|---|
 | Bare metal | always skip | Bare metal instances don't support Optimize CPUs |
-| Platform mismatch | skip | Only modifies instances matching the `Platform` parameter. Set `Platform=All` to override |
+| Platform mismatch | skip | Only modifies instances matching the `Platform` parameter. Defaults to  `Platform=Windows` |
 | Unsupported TPC | always skip | Instance types that don't support the requested ThreadsPerCore |
 | Auto Scaling group | always skip | Instances in an ASG are always skipped. API errors abort (fail-safe). |
 | Instance store | skip | Ephemeral data lost on stop. Set `SkipInstanceStore=no` to override |
-| Non-EIP public IP | skip | Public IP changes on stop/start. API errors abort (fail-safe). Set `SkipPublicIP=no` to override |
+| Non-Elastic public IP | skip | Public IP changes on stop/start. API errors abort (fail-safe). Set `SkipPublicIP=no` to override |
 | Running instances | skip | Set `StopStartedInstances=yes` to allow stop/modify/restart |
 
 ## Parameters
@@ -42,6 +42,16 @@ The document includes several pre-flight checks that **fail safe** — if an API
 ## Usage
 
 ### Install the document
+
+Recommend using [AWS CloudShell](https://docs.aws.amazon.com/cloudshell/latest/userguide/welcome.html), which comes with PowerShell and AWS modules pre-installed, and credentials are automatically configured.
+
+1. Download the [Set-ThreadsPerCore.yaml](https://github.com/aws-samples/technical-notes-for-microsoft-workloads-on-aws/blob/2ebc1a9e4db9b9e311f5b60e152b7f38810dd840/docusaurus/docs/Licensing/Guides/Optimize_CPU_Costs/Scripts/SetThreadsPerCore_SSM/Set-ThreadsPerCore.yaml) SSM Automation document to you desktop.
+2. Sign in to the AWS Console
+3. Open [CloudShell](https://console.aws.amazon.com/cloudshell/home)
+4. [Upload the script file](https://docs.aws.amazon.com/cloudshell/latest/userguide/getting-started.html#folder-upload)
+5. Run `pwsh`
+
+### Install the SSM Automation document
 
 ```powershell
 New-SSMDocument `

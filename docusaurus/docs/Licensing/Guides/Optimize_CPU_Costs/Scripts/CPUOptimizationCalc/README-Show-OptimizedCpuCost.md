@@ -26,16 +26,6 @@ With ThreadsPerCore = 1, active vCPUs = number of physical cores (half the defau
 
 Instances that don't use SMT by default (e.g. AMD r8a) will show 0% savings since they already run 1 thread per core.
 
-## Getting started
-
-The easiest way to run this script is from [AWS CloudShell](https://docs.aws.amazon.com/cloudshell/latest/userguide/welcome.html), which comes with PowerShell and AWS modules pre-installed, and credentials are automatically configured.
-
-1. Sign in to the AWS Console
-2. Open [CloudShell](https://us-east-2.console.aws.amazon.com/cloudshell/home)
-3. [Upload the script file](https://docs.aws.amazon.com/cloudshell/latest/userguide/getting-started.html#folder-upload)
-4. Run `pwsh`
-
-
 ## Requirements
 
 - PowerShell 7+  (preinstalled in CloudShell)
@@ -43,6 +33,16 @@ The easiest way to run this script is from [AWS CloudShell](https://docs.aws.ama
   - `AWS.Tools.EC2`
   - `AWS.Tools.Pricing`
 - Valid AWS credentials with `ec2:DescribeInstanceTypes` and `pricing:GetProducts` permissions
+
+## Getting started
+
+The easiest way to run this script is from [AWS CloudShell](https://docs.aws.amazon.com/cloudshell/latest/userguide/welcome.html), which comes with PowerShell and AWS modules pre-installed, and credentials are automatically configured.
+
+1. Download the [Show-OptimizedCpuCost.ps1](https://github.com/aws-samples/technical-notes-for-microsoft-workloads-on-aws/blob/main/docusaurus/docs/Licensing/Guides/Optimize_CPU_Costs/Scripts/CPUOptimizationCalc/Show-OptimizedCpuCost.ps1) script to you desktop.
+2. Sign in to the AWS Console
+3. Open [CloudShell](https://console.aws.amazon.com/cloudshell/home)
+4. [Upload the script file](https://docs.aws.amazon.com/cloudshell/latest/userguide/getting-started.html#folder-upload)
+5. Run `pwsh`
 
 ## Usage
 
