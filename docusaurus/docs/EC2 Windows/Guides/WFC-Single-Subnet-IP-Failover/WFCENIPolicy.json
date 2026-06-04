@@ -1,0 +1,24 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "DescribeENIs",
+            "Effect": "Allow",
+            "Action": "ec2:DescribeNetworkInterfaces",
+            "Resource": "*"
+        },
+        {
+            "Sid": "ModifySpecificENIs",
+            "Effect": "Allow",
+            "Action": [
+                "ec2:ModifyNetworkInterfaceAttribute",
+                "ec2:UnassignPrivateIpAddresses",
+                "ec2:AssignPrivateIpAddresses"
+            ],
+            "Resource": [
+                "arn:aws:ec2:*:*:network-interface/eni-abcdef01234567890",
+                "arn:aws:ec2:*:*:network-interface/eni-abcdef01234567891"
+            ]
+        }
+    ]
+}
