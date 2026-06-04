@@ -23,9 +23,9 @@ The 2 PowerShell scripts in the [Scripts](./Scripts/) folder demonstrate cost sa
 
 | Script | Description |
 |--------|-------------
-| [Show-OptimizedCpuCost.ps1](https://github.com/HP-85/technical-notes-for-microsoft-workloads-on-aws/blob/2ebc1a9e4db9b9e311f5b60e152b7f38810dd840/docusaurus/docs/Licensing/Guides/Optimize_CPU_Costs/Scripts/CPUOptimizationCalc/README-Show-OptimizedCpuCost.md) | Shows per-instance cost savings when setting [ThreadsPerCore](https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_CpuOptionsRequest.html)=1 |
-| [Show-AccountCpuOptimization.ps1](https://github.com/HP-85/technical-notes-for-microsoft-workloads-on-aws/blob/2ebc1a9e4db9b9e311f5b60e152b7f38810dd840/docusaurus/docs/Licensing/Guides/Optimize_CPU_Costs/Scripts/CPUOptimizationCalc/Show-AccountCpuOptimization.ps1) | Scans instances in your account and shows optimization opportunities |
-| [Set-ThreadsPerCore.yaml](https://github.com/HP-85/technical-notes-for-microsoft-workloads-on-aws/blob/2ebc1a9e4db9b9e311f5b60e152b7f38810dd840/docusaurus/docs/Licensing/Guides/Optimize_CPU_Costs/Scripts/SetThreadsPerCore_SSM/README.md) | SSM Automation document to set [ThreadsPerCore](https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_CpuOptionsRequest.html) on existing instances |
+| [Show-OptimizedCpuCost.ps1](https://github.com/aws-samples/technical-notes-for-microsoft-workloads-on-aws/blob/main/docusaurus/docs/Licensing/Guides/Optimize_CPU_Costs/Scripts/CPUOptimizationCalc/README-Show-OptimizedCpuCost.md) | Shows per-instance cost savings when setting [ThreadsPerCore](https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_CpuOptionsRequest.html)=1 |
+| [Show-AccountCpuOptimization.ps1](https://github.com/aws-samples/technical-notes-for-microsoft-workloads-on-aws/blob/main/docusaurus/docs/Licensing/Guides/Optimize_CPU_Costs/Scripts/CPUOptimizationCalc/README-Show-AccountCpuOptimization.md) | Scans instances in your account and shows optimization opportunities |
+| [Set-ThreadsPerCore.yaml](https://github.com/aws-samples/technical-notes-for-microsoft-workloads-on-aws/tree/main/docusaurus/docs/Licensing/Guides/Optimize_CPU_Costs/Scripts/SetThreadsPerCore_SSM) | SSM Automation document to set [ThreadsPerCore](https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_CpuOptionsRequest.html) on existing instances |
 
 ### Requirements
 
