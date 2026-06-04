@@ -171,14 +171,14 @@ The `Install_AWS_WFC_IP_App.ps1` script does the following:
 * The IP address for each Cluster Resource Group changed to 'Static' vs 'DHCP'
 * Outbound network connectivity to run AWS API.
 
-1) Create an IAM Role for the Windows Failover Cluster and assign it to each Instance.  Add an inline IAM policy to allow the Instances to update their ENIs.  You can use [WFCENIPolicy.json](./WFCENIPolicy.json) and update the ENI IDs for each server in the cluster.
+1) Create an IAM Role for the Windows Failover Cluster and assign it to each Instance.  Add an inline IAM policy to allow the Instances to update their ENIs.  You can use [WFCENIPolicy.json](https://github.com/aws-samples/technical-notes-for-microsoft-workloads-on-aws/blob/main/docusaurus/docs/EC2%20Windows/Guides/WFC-Single-Subnet-IP-Failover/WFCENIPolicy.json) and update the ENI IDs for each server in the cluster.
 
 Example:
 ![Instance Role](./images/OverView2.jpg)
 
 2) Download these 2 PowerShell scripts to one of the Windows instances. (eg C:\users\admin\Downloads)
-* [Install_AWS_WFC_IP_App.ps1](./Install_AWS_WFC_IP_App.ps1)
-* [AWS_WFC_IP_Address.ps1](./AWS_WFC_IP_Address.ps1)
+* [Install_AWS_WFC_IP_App.ps1](https://github.com/aws-samples/technical-notes-for-microsoft-workloads-on-aws/blob/main/docusaurus/docs/EC2%20Windows/Guides/WFC-Single-Subnet-IP-Failover/Install_AWS_WFC_IP_App.ps1)
+* [AWS_WFC_IP_Address.ps1](https://github.com/aws-samples/technical-notes-for-microsoft-workloads-on-aws/blob/main/docusaurus/docs/EC2%20Windows/Guides/WFC-Single-Subnet-IP-Failover/AWS_WFC_IP_Address.ps1)
 
 3) Open a PowerShell prompt with Admin permissions and run `Install_AWS_WFC_IP_App.ps1` for each Cluster Group.
 * run once and select the WFC group named **Cluster Group** which is the WFC management group which hosts the Cluster Name, IP address, and Quorum Drive
