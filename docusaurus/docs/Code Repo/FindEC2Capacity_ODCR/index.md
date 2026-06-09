@@ -53,7 +53,7 @@ pwsh
 
 📖 **[Full documentation and examples →](./README.md)**
 
-📥 **[Download FindEC2Capacity_ODCR.ps1](./FindEC2Capacity_ODCR.ps1)**
+📥 **[Download FindEC2Capacity_ODCR.ps1](https://github.com/aws-samples/technical-notes-for-microsoft-workloads-on-aws/blob/main/docusaurus/docs/Code%20Repo/FindEC2Capacity_ODCR/FindEC2Capacity_ODCR.ps1)**
 
 ---
 

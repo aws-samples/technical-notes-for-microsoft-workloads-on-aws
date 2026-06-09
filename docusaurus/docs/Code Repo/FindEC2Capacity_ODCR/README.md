@@ -23,7 +23,7 @@ You can then launch instances into the capacity reservation, stop or terminate, 
 
 1. Open [CloudShell](https://docs.aws.amazon.com/cloudshell/latest/userguide/getting-started.html) in the AWS Console
 2. Launch PowerShell 7: `pwsh`
-3. [Upload](https://docs.aws.amazon.com/cloudshell/latest/userguide/getting-started.html#folder-upload) [`FindEC2Capacity_ODCR.ps1`](./FindEC2Capacity_ODCR.ps1) to CloudShell
+3. [Upload](https://docs.aws.amazon.com/cloudshell/latest/userguide/getting-started.html#folder-upload) [`FindEC2Capacity_ODCR.ps1`](https://github.com/aws-samples/technical-notes-for-microsoft-workloads-on-aws/blob/main/docusaurus/docs/Code%20Repo/FindEC2Capacity_ODCR/FindEC2Capacity_ODCR.ps1) to CloudShell
 4. Run:
 ```powershell
 .\FindEC2Capacity_ODCR.ps1 -OS Windows -InstanceType g7e.2xlarge -RegionGroup us
