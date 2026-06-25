@@ -1,0 +1,45 @@
+---
+title: Upgrade Flowchart
+description: Decision flowchart showing the automated Windows Server 2016 to 2019 in-place upgrade process
+sidebar_position: 4
+---
+
+# Upgrade Flowchart
+
+The diagram below summarizes the decision logic embedded in the SSM Automation document.
+
+```mermaid
+flowchart TD
+    A[Start Automation] --> B{Instance Online?}
+    B -- Yes --> C{SSM Agent Responding?}
+    B -- No --> Z[Abort - Instance Not Running]
+    C -- Yes --> D{Has IAM Profile with SSM?}
+    C -- No --> Z2[Abort - No SSM Connectivity]
+    D -- Yes --> E[Create Pre-Upgrade AMI]
+    D -- No --> D1[Attach WindowsUpgradeInstanceRole]
+    D1 --> E
+    E --> F{EBS Root Volume >= 30 GB?}
+    F -- Yes --> G[Stop Instance]
+    F -- No --> F1[Expand Root Volume to 30 GB]
+    F1 --> G
+    G --> H[Start Instance]
+    H --> I[Run In-Place Upgrade via SSM RunCommand]
+    I --> J{Upgrade Successful?}
+    J -- Yes --> K[Reboot & Verify OS Version]
+    J -- No --> L[Rollback from AMI]
+    K --> M{Was IAM Profile Temporarily Added?}
+    M -- Yes --> N[Remove WindowsUpgradeInstanceRole]
+    M -- No --> O[Done - Notify via SNS]
+    N --> O
+    L --> O
+```
+
+## Key Decision Points
+
+| Step | Decision | Pass Criteria |
+|------|----------|---------------|
+| Instance Online | EC2 Running state | `InstanceStateName = running` |
+| SSM Connectivity | SSM Agent active | `PingStatus = Online` |
+| IAM Profile | Has SSM permissions | Instance profile includes `AmazonSSMManagedInstanceCore` or equivalent |
+| Volume Size | Root EBS >= 30 GB | `VolumeSize >= 30` |
+| Upgrade Result | Windows Setup exit code | Exit code `0` or Windows version matches 2019 |
