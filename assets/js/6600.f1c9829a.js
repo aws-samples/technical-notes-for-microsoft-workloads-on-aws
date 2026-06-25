@@ -1,0 +1,1 @@
+"use strict";(self.webpackChunktechnical_notes_for_microsoft_workloads_on_aws=self.webpackChunktechnical_notes_for_microsoft_workloads_on_aws||[]).push([[6600],{46600:(o,s,e)=>{e.d(s,{createGitGraphServices:()=>_.b});var _=e(71077);e(51400)}}]);

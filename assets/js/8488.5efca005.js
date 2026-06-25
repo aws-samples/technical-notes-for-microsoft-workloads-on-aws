@@ -1,0 +1,1 @@
+"use strict";(self.webpackChunktechnical_notes_for_microsoft_workloads_on_aws=self.webpackChunktechnical_notes_for_microsoft_workloads_on_aws||[]).push([[8488],{8488:(e,o,s)=>{s.d(o,{createArchitectureServices:()=>c.S});var c=s(89221);s(51400)}}]);

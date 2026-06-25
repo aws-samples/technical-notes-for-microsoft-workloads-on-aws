@@ -1,0 +1,1 @@
+"use strict";(self.webpackChunktechnical_notes_for_microsoft_workloads_on_aws=self.webpackChunktechnical_notes_for_microsoft_workloads_on_aws||[]).push([[7671],{47671:(e,o,s)=>{s.d(o,{createTreemapServices:()=>_.d});var _=s(14687);s(51400)}}]);

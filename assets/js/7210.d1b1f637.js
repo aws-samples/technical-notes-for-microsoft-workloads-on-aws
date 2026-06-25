@@ -1,0 +1,1 @@
+"use strict";(self.webpackChunktechnical_notes_for_microsoft_workloads_on_aws=self.webpackChunktechnical_notes_for_microsoft_workloads_on_aws||[]).push([[7210],{17210:(o,s,e)=>{e.d(s,{createRadarServices:()=>a.f});var a=e(97899);e(51400)}}]);

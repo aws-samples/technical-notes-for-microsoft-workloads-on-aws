@@ -1,0 +1,1 @@
+"use strict";(self.webpackChunktechnical_notes_for_microsoft_workloads_on_aws=self.webpackChunktechnical_notes_for_microsoft_workloads_on_aws||[]).push([[8391],{28391:(o,s,e)=>{e.d(s,{createInfoServices:()=>_.v});var _=e(6491);e(51400)}}]);

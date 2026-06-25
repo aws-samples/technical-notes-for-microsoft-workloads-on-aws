@@ -1,0 +1,1 @@
+"use strict";(self.webpackChunktechnical_notes_for_microsoft_workloads_on_aws=self.webpackChunktechnical_notes_for_microsoft_workloads_on_aws||[]).push([[8478],{48478:(e,o,s)=>{s.d(o,{createWardleyServices:()=>_.J});var _=s(88937);s(51400)}}]);
