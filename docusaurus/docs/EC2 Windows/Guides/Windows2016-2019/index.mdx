@@ -1,0 +1,49 @@
+---
+title: Windows Server 2016 to 2019 In-Place Upgrade
+description: Automated SSM solution for upgrading EC2 instances from Windows Server 2016 to Windows Server 2019, avoiding Extended Security Update costs after end-of-support in January 2027
+sidebar_position: 1
+---
+
+# Windows Server 2016 to 2019 In-Place Upgrade
+
+Automated SSM Automation solution for upgrading EC2 instances from Windows Server 2016 to Windows Server 2019.
+
+## Why Upgrade?
+
+**Windows Server 2016 reaches end of support on January 14, 2027.** After that date, Microsoft will no longer provide free security patches for Windows Server 2016. Organizations that remain on 2016 must purchase [Extended Security Updates (ESU)](https://learn.microsoft.com/en-us/windows-server/get-started/extended-security-updates-overview), which carry significant per-instance annual costs.
+
+| Year | ESU Cost (per 2-vCPU core pack) |
+|------|------|
+| Year 1 (2027) | ~75% of the license cost |
+| Year 2 (2028) | ~100% of the license cost |
+| Year 3 (2029) | ~125% of the license cost |
+
+Upgrading to Windows Server 2019 avoids ESU charges entirely and keeps your fleet on a supported, actively patched operating system through January 2029 (mainstream) and January 2034 (extended).
+
+## When to Use This
+
+The **preferred approach** for OS upgrades is to build new servers and redeploy your application — see Microsoft's [upgrade overview](https://learn.microsoft.com/en-us/windows-server/get-started/upgrade-overview) for guidance on upgrade paths.
+
+**When rebuilding isn't practical**, this automation performs a Windows in-place upgrade directly on the existing EC2 instance, based on the [AWS in-place upgrade guide](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/os-inplaceupgrade.html). Common scenarios:
+
+- Legacy applications with deep OS-level dependencies (registry, COM registrations, local state)
+- Instances with configurations that are difficult to replicate (Active Directory domain-joined, complex network ACLs, custom drivers)
+- Fleets where the cost and risk of rebuilding every server exceeds an in-place upgrade
+- Short timelines where there isn't time to re-architect
+
+## What's Included
+
+| File | Description |
+|------|-------------|
+| [Windows-2016-to-2019-Upgrade.json](https://github.com/aws-samples/technical-notes-for-microsoft-workloads-on-aws/blob/main/docusaurus/docs/EC2%20Windows/Guides/Windows2016-2019/ssm-documents/Windows-2016-to-2019-Upgrade.json) | Main SSM Automation document — performs the full upgrade |
+| [windows-2016-to-2019-precheck.json](https://github.com/aws-samples/technical-notes-for-microsoft-workloads-on-aws/blob/main/docusaurus/docs/EC2%20Windows/Guides/Windows2016-2019/ssm-documents/windows-2016-to-2019-precheck.json) | Pre-flight check document — validates readiness without making changes |
+| [IAM Roles](./iam-roles) | IAM role and policy setup instructions |
+
+## Getting Started
+
+1. **[Create the IAM roles](./iam-roles)** required by the automation
+2. **Deploy the SSM documents** to your AWS account
+3. **Run a pre-flight check** (`DryRun=true`) to validate your instance
+4. **Start the upgrade** (`DryRun=false`)
+
+👉 **[Full guide →](./Windows2016to2019Upgrade)**
