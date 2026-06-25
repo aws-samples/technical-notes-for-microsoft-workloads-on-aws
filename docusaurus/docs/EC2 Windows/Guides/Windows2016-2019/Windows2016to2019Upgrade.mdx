@@ -171,7 +171,7 @@ Runs the PreCheck document and reports results. Never modifies the instance. If 
 4. **DeprecateBackupImage** — Set AMI deprecation date based on BackupRetentionDays
 5. **WaitForInstanceAfterReboot** — Poll SSM agent: wait for offline (reboot started) then online (reboot complete)
 6. **UpdateSSMAgent** — Update SSM Agent to latest version
-7. **CheckDiskSpaceAndExpand** — If <20GB free, expand EBS volume and extend C: to max
+7. **CheckDiskSpaceAndExpand** — If `<20GB` free, expand EBS volume and extend C: to max
 8. **FindWindows2019Snapshot** — Detect OS language, find matching AWS installation media snapshot
 9. **CreateUpgradeVolume** — Create GP3 volume from snapshot (initializes during driver installs)
 10. **Install drivers** — Update ENA, PV, NVMe drivers
