@@ -1,0 +1,150 @@
+---
+title: IAM Roles Setup
+description: Create the IAM roles required by the Windows Server 2016 to 2019 in-place upgrade automation
+sidebar_position: 3
+---
+
+# IAM Role Setup
+
+Create these two IAM roles before running the upgrade automation. Open CloudShell and run `pwsh` to use PowerShell.
+
+Replace `YOUR_ACCOUNT_ID` below with your AWS account ID.
+
+## 1. Automation Service Role
+
+This role is assumed by SSM Automation to orchestrate the upgrade — calls EC2, SSM, and IAM APIs on your behalf.
+
+- **Trust:** `ssm.amazonaws.com`
+- **Permissions:** EC2 (instances, volumes, images, snapshots), SSM (commands), IAM (instance profiles), SNS
+
+```powershell
+New-IAMRole `
+    -RoleName 'WindowsUpgradeAutomationRole' `
+    -AssumeRolePolicyDocument '{
+        "Version":"2012-10-17",
+        "Statement":[{
+            "Effect":"Allow",
+            "Principal":{"Service":"ssm.amazonaws.com"},
+            "Action":"sts:AssumeRole"
+        }]
+    }'
+
+$policy = @'
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "EC2Actions",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:DescribeInstances",
+        "ec2:DescribeInstanceStatus",
+        "ec2:DescribeInstanceAttribute",
+        "ec2:StopInstances",
+        "ec2:StartInstances",
+        "ec2:RebootInstances",
+        "ec2:CreateImage",
+        "ec2:DescribeImages",
+        "ec2:CreateVolume",
+        "ec2:AttachVolume",
+        "ec2:DetachVolume",
+        "ec2:DeleteVolume",
+        "ec2:DescribeVolumes",
+        "ec2:ModifyVolume",
+        "ec2:DescribeVolumesModifications",
+        "ec2:DescribeSnapshots",
+        "ec2:CreateTags",
+        "ec2:DescribeTags",
+        "ec2:DescribeInstanceTypes",
+        "ec2:DescribeAddresses",
+        "ec2:CreateReplaceRootVolumeTask",
+        "ec2:DescribeReplaceRootVolumeTasks",
+        "ec2:EnableImageDeprecation",
+        "autoscaling:DescribeAutoScalingInstances"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "SSMActions",
+      "Effect": "Allow",
+      "Action": [
+        "ssm:SendCommand",
+        "ssm:GetCommandInvocation",
+        "ssm:DescribeInstanceInformation",
+        "ssm:GetDocument",
+        "ssm:ListCommands",
+        "ssm:ListCommandInvocations",
+        "ssm:StartAutomationExecution",
+        "ssm:GetAutomationExecution",
+        "ssm:DescribeAutomationExecutions"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "IAMActions",
+      "Effect": "Allow",
+      "Action": [
+        "iam:GetInstanceProfile",
+        "iam:ListInstanceProfiles",
+        "iam:ListAttachedRolePolicies",
+        "iam:ListRolePolicies",
+        "iam:GetRolePolicy",
+        "iam:GetPolicy",
+        "iam:GetPolicyVersion",
+        "ec2:DescribeIamInstanceProfileAssociations",
+        "ec2:AssociateIamInstanceProfile",
+        "ec2:DisassociateIamInstanceProfile"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "PassRole",
+      "Effect": "Allow",
+      "Action": "iam:PassRole",
+      "Resource": [
+        "arn:aws:iam::YOUR_ACCOUNT_ID:role/WindowsUpgradeInstanceRole",
+        "arn:aws:iam::YOUR_ACCOUNT_ID:role/WindowsUpgradeAutomationRole"
+      ]
+    },
+    {
+      "Sid": "SNSNotification",
+      "Effect": "Allow",
+      "Action": "sns:Publish",
+      "Resource": "*"
+    }
+  ]
+}
+'@
+Register-IAMRolePolicy `
+    -RoleName 'WindowsUpgradeAutomationRole' `
+    -PolicyArn (New-IAMPolicy -PolicyName 'WindowsUpgradeAutomationPolicy' -PolicyDocument $policy).Arn
+```
+
+## 2. Instance Role
+
+This role is temporarily attached to instances that don't have SSM permissions. The automation attaches it before the upgrade and removes it afterward.
+
+- **Trust:** `ec2.amazonaws.com`
+- **Managed Policy:** `AmazonSSMManagedInstanceCore`
+
+```powershell
+New-IAMRole `
+    -RoleName 'WindowsUpgradeInstanceRole' `
+    -AssumeRolePolicyDocument '{
+        "Version":"2012-10-17",
+        "Statement":[{
+            "Effect":"Allow",
+            "Principal":{"Service":"ec2.amazonaws.com"},
+            "Action":"sts:AssumeRole"
+        }]
+    }'
+Register-IAMRolePolicy `
+    -RoleName 'WindowsUpgradeInstanceRole' `
+    -PolicyArn 'arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore'
+
+New-IAMInstanceProfile `
+    -InstanceProfileName 'WindowsUpgradeInstanceProfile'
+Add-IAMRoleToInstanceProfile `
+    -InstanceProfileName 'WindowsUpgradeInstanceProfile' `
+    -RoleName 'WindowsUpgradeInstanceRole'
+```

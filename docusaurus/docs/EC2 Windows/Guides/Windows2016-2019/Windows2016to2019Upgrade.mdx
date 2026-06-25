@@ -1,0 +1,291 @@
+---
+title: Upgrade Guide
+description: Step-by-step guide for running the Windows Server 2016 to 2019 in-place upgrade automation via SSM
+sidebar_position: 2
+---
+
+# Windows Server 2016 to 2019 Upgrade Guide
+
+## Overview
+
+This automation uses SSM to orchestrate an in-place upgrade from Windows Server 2016 to 2019 directly on the existing EC2 instance.
+
+**Why in-place on the same instance?**
+- Instance ID, tags, network config (IPs, subnets, security groups), and instance profile all remain unchanged
+- No Active Directory conflicts (machine SID, computer account, domain trust)
+- No need to update references in load balancers, DNS, monitoring, or scripts
+- Instance store volumes are preserved (reboot only, no stop/start)
+- CloudWatch metrics and logs remain continuous — no gap in monitoring history
+- Operationally similar to applying monthly patches — the instance reboots and comes back upgraded
+
+The automation handles:
+- Pre-flight checks (OS version, SSM agent, disk space, partition layout)
+- AMI backup with configurable retention
+- Driver updates (ENA, PV, NVMe)
+- Windows in-place upgrade using AWS-provided installation media
+- Deterministic OS + .NET cumulative updates so the box isn't left at the 2019 media baseline (optional)
+- Automatic cleanup
+
+## Prerequisites
+
+- Windows Server 2016 EC2 instance
+- SSM Agent installed and running
+- Xen PV or ENA networking (SR-IOV/Intel 82599 not supported). If using a 4th-generation instance (m4, c4, etc.) with the Intel 82599 ENI, [migrate to a current-generation instance type](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/migrating-latest-types.html) (m5, c5, or newer) before running this automation.
+- SSM connectivity — internet or SSM VPC endpoints — so the automation can manage the instance
+- **Outbound internet (HTTPS 443) to the Microsoft Update Catalog CDN** if cumulative-update patching is enabled (the default). The pinned CUs download directly from Microsoft; SSM VPC endpoints alone are not sufficient. If the instance has no internet egress, set `InstallCumulativeUpdates=false` and apply patches with your own process.
+- C: drive must be the last partition if disk expansion is needed
+
+### Application Availability During the Upgrade
+
+The instance reboots several times and is unavailable for the duration (similar to a larger-than-usual patch window). **Treat this like routine OS patching (monthly cumulative updates): use whatever process you already run before patching that instance** to stop it from serving traffic and to protect your application — for example, draining and deregistering it from the load balancer / target group, pausing health checks, enabling maintenance mode, quiescing the application or services, or scheduling a maintenance window. The automation does not modify your application, load balancer, or DNS; managing traffic and application state before and after is the owner's responsibility, just as it is for normal patching.
+
+The instance is only **rebooted**, never stopped/started (this holds for the rollback path too, which uses [Replace Root Volume](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/replace-root.html) in place). So **instance-store volumes and an auto-assigned (dynamic) public IP are preserved** across the upgrade.
+
+### Supported Languages
+
+The automation auto-detects the OS language and selects matching Windows 2019 installation media:
+
+Chinese (Traditional), Czech, Dutch, English, French, German, Hungarian, Italian, Japanese, Korean, Polish, Portuguese (Brazil), Portuguese (Portugal), Russian, Spanish, Swedish, Turkish
+
+## Quick Setup
+
+### 1. Create IAM Roles
+
+The automation requires two IAM roles. See **[IAM Roles Setup](./iam-roles)** for complete instructions and policy documents.
+
+### 2. Deploy SSM Automation Documents
+
+Download the SSM documents:
+- [Windows-2016-to-2019-Upgrade.json](https://github.com/aws-samples/technical-notes-for-microsoft-workloads-on-aws/blob/main/docusaurus/docs/EC2%20Windows/Guides/Windows2016-2019/ssm-documents/Windows-2016-to-2019-Upgrade.json)
+- [windows-2016-to-2019-precheck.json](https://github.com/aws-samples/technical-notes-for-microsoft-workloads-on-aws/blob/main/docusaurus/docs/EC2%20Windows/Guides/Windows2016-2019/ssm-documents/windows-2016-to-2019-precheck.json)
+
+Upload to CloudShell and run:
+
+```powershell
+New-SSMDocument -Name 'Windows-2016-to-2019-PreCheck' `
+    -DocumentType 'Automation' -DocumentFormat 'JSON' `
+    -Content (Get-Content -Raw windows-2016-to-2019-precheck.json)
+
+New-SSMDocument -Name 'Windows-2016-to-2019-Upgrade' `
+    -DocumentType 'Automation' -DocumentFormat 'JSON' `
+    -Content (Get-Content -Raw Windows-2016-to-2019-Upgrade.json)
+```
+
+See the [SSM Automation User Guide](https://docs.aws.amazon.com/systems-manager/latest/userguide/systems-manager-automation.html) for more on creating and managing automation documents.
+
+## Run PreCheck or Start Upgrade
+
+```powershell
+# Run from CloudShell (region auto-detected)
+$AccountId = (Get-STSCallerIdentity).Account
+
+Start-SSMAutomationExecution -DocumentName 'Windows-2016-to-2019-Upgrade' -Parameter @{
+    InstanceId = 'i-0123456789abcdef0'
+    AutomationAssumeRole = "arn:aws:iam::${AccountId}:role/WindowsUpgradeAutomationRole"
+    # DryRun = 'true'  # Uncomment to run pre-flight checks only
+}
+```
+
+### From the Systems Manager Console
+
+You can also run it from the web console instead of CloudShell:
+
+1. Open the [Systems Manager Automation console](https://console.aws.amazon.com/systems-manager/automation/execute/) (top-right region selector must be the instance's region).
+2. Choose **Execute automation**.
+3. Under **Choose document**, open the **Owned by me** tab and select `Windows-2016-to-2019-Upgrade` (or `Windows-2016-to-2019-PreCheck`), then **Next**.
+4. Leave **Simple execution** selected and fill in the parameters — at minimum `InstanceId` and `AutomationAssumeRole` (set `DryRun = true` for pre-flight checks only).
+5. Choose **Execute**, then watch step-by-step progress on the execution detail page.
+
+## Parameters
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| InstanceId | *(required)* | EC2 instance to upgrade |
+| AutomationAssumeRole | *(required)* | ARN of WindowsUpgradeAutomationRole |
+| DryRun | false | Run pre-flight checks only, no changes |
+| AutoRollback | false | Automatically rollback if upgrade fails |
+| BackupRetentionDays | 30 | Days to retain backup AMI |
+| WaitForBackupAMI | false | Wait for AMI to complete before proceeding |
+| InstallCumulativeUpdates | true | Install pinned OS + .NET CUs after upgrade; false skips patching |
+| PinnedCumulativeUpdateUrl | June 2026 KB5094123 | Catalog .msu URL of the OS cumulative update (SSU+LCU) |
+| PinnedDotNetUpdateUrl | KB5087061 | Catalog .msu URL of the .NET Framework CU |
+| UpgradeInstanceProfileName | WindowsUpgradeInstanceProfile | Instance profile to attach if the instance has no instance profile (removed afterward) |
+| NotificationTopicArn | "" | SNS topic for completion notification |
+
+## Monitor Progress
+
+### List All Running Upgrades
+
+```powershell
+Get-SSMAutomationExecutionList -Filter @{
+    Key='DocumentNamePrefix';Values='Windows-2016-to-2019-Upgrade'
+} |
+  Where-Object { $_.AutomationExecutionStatus -in @('InProgress','Success','Failed','TimedOut') } |
+  ForEach-Object {
+    $d = Get-SSMAutomationExecution -AutomationExecutionId $_.AutomationExecutionId
+    if (-not $d.Parameters.ContainsKey('InstanceId')) { return }
+    $id = $d.Parameters['InstanceId'][0]
+    $name = try { ((Get-EC2Instance $id).Instances[0].Tags |
+        Where-Object Key -eq Name).Value } catch {''}
+    [PSCustomObject]@{
+        Name=$name; Instance=$id;
+        Status=$_.AutomationExecutionStatus;
+        Step=$_.CurrentStepName;
+        ExecId=$_.AutomationExecutionId
+    }
+  } | Format-Table
+```
+
+### View Step-by-Step Progress
+
+```powershell
+$ExecId = 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'
+(Get-SSMAutomationExecution -AutomationExecutionId $ExecId).StepExecutions |
+    Where-Object { $_.StepStatus -ne 'Pending' } |
+    Select-Object StepName, StepStatus | Format-Table -AutoSize
+```
+
+## Automation Steps
+
+See the **[Automation Flowchart](./flowchart)** for a visual diagram of all execution paths (happy path, rollback, and failure cleanup).
+
+### Temporary Upgrade Profile (IAM)
+
+If the instance has no instance profile, the automation attaches a temporary one (`UpgradeInstanceProfileName`, default `WindowsUpgradeInstanceProfile`) so SSM can drive the upgrade, and removes it when finished. Removal behavior:
+
+- **On success:** always removed (`RemoveTempProfile`).
+- **On upgrade failure / rollback:** removed (`FailRemoveTempProfile` / `RollbackRemoveTempProfile`).
+- **On any other step abort:** the failing step routes to a cleanup path that removes the temp profile and then fails loud. Steps that run *after* the upgrade EBS volume is created (volume attach/mount) route through `FailCleanupUpgradeVolume` first, so that volume is deleted before the profile is removed and the automation fails — no orphaned volume. Earlier steps (no volume yet) route straight to `CleanupTempProfileOnFailure`. `EnsureSsmAccess` also self-cleans if it attaches the profile but SSM never comes online.
+
+When the default profile (`WindowsUpgradeInstanceProfile`) is used, it is removed in every path. If you set the `UpgradeInstanceProfileName` parameter to a *different* profile of your own, removal is best-effort on failure: it is always attempted and is reliably removed on success, but if the cleanup call itself fails (throttling, transient API error), the automation aborts loudly and that profile may stay attached for manual cleanup. In all cases the automation never modifies an instance profile the instance already had.
+
+### DryRun=true (Pre-Flight Checks Only)
+
+Runs the PreCheck document and reports results. Never modifies the instance. If the instance lacks SSM permissions, API-based checks run and OS-level checks are skipped.
+
+### DryRun=false (Full Upgrade)
+
+1. **EnsureSsmAccess** — If the instance has an instance profile granting SSM permissions, use it. If it has an instance profile *without* SSM permissions, fail with guidance (the automation does not modify the instance's existing profile). If it has no instance profile, attach a temporary `WindowsUpgradeInstanceProfile` (removed at the end).
+2. **RunPreflightChecks** — Call PreCheck document (instance now has SSM permissions)
+3. **CreateBackupImage** — Create AMI (reboots instance for filesystem consistency)
+4. **DeprecateBackupImage** — Set AMI deprecation date based on BackupRetentionDays
+5. **WaitForInstanceAfterReboot** — Poll SSM agent: wait for offline (reboot started) then online (reboot complete)
+6. **UpdateSSMAgent** — Update SSM Agent to latest version
+7. **CheckDiskSpaceAndExpand** — If <20GB free, expand EBS volume and extend C: to max
+8. **FindWindows2019Snapshot** — Detect OS language, find matching AWS installation media snapshot
+9. **CreateUpgradeVolume** — Create GP3 volume from snapshot (initializes during driver installs)
+10. **Install drivers** — Update ENA, PV, NVMe drivers
+11. **AttachUpgradeVolume** — Find available device (/dev/sdf-sdp) and attach volume
+12. **InitializeAndMountVolume** — Bring disk online, assign drive letter, mount ISO if needed, verify setup.exe
+13. **PerformUpgrade** — Run `setup.exe /auto upgrade /dynamicupdate disable`
+14. **Verification loop** — 4 cycles (15 min initial wait + 8 min intervals): wait for SSM online, verify OS is 2019
+15. **CleanupUpgradeVolume** — Detach and delete upgrade EBS volume
+16. **InstallPinnedUpdates** — Download the pinned OS CU (SSU+LCU) and .NET CU `.msu`s, extract, and install via DISM (SSU first, then LCUs); single reboot finalizes all three. Skipped if `InstallCumulativeUpdates=false`. **Best-effort:** patch failures do not fail the run — the OS upgrade already succeeded.
+17. **VerifyPatchLevel** — Poll until the pinned OS CU shows installed (`Get-HotFix`); activity-aware: waits only while servicing is active (RebootPending / TiWorker), fails fast if it settles without the CU; also confirms the .NET CU. Best-effort (does not abort the run).
+18. **RemoveRecoveryPartition** — Delete recovery partition created by upgrade, extend C: to reclaim space
+19. **RemoveTempProfile** — Remove the temporary `WindowsUpgradeInstanceProfile` if the automation attached one (no-op if the instance already had its own instance profile)
+20. **SendSuccessNotification** — Publish to SNS topic (if NotificationTopicArn provided)
+
+Defender platform and definition updates self-update independently, so they are not installed here. Customers who skip patching (`InstallCumulativeUpdates=false`) or want absolute-latest should run their own patch process after the upgrade.
+
+## Patching Behavior and Updating the Pinned CUs
+
+The 2019 installation media is static — it always lands the OS at the **Sept-2019 baseline (build 17763.737)** and resets in-box .NET 4.7.2 to that era. Windows Update does not reliably surface the current OS cumulative for ~30 minutes after an in-place upgrade, so the automation installs **pinned** cumulative updates by direct Microsoft Update Catalog URL instead of relying on Windows Update. This is deterministic and reproducible.
+
+**Patching is best-effort and non-fatal.** The mission is the 2016→2019 upgrade (2016 is approaching end of support); patching is a follow-up. The patch steps (`InstallPinnedUpdates` → `RebootAfterUpdates` → `WaitForInstanceAfterUpdates` → `VerifyPatchLevel`) run with `onFailure: Continue`, so if the pinned CU can't be downloaded or installed (bad/expired URL, transient error), the automation logs the failure on those steps but **still completes successfully** — the instance is left upgraded, the recovery partition reclaimed, and the temp profile removed. Apply the CU afterward with your own patch process. Check the `InstallPinnedUpdates`/`VerifyPatchLevel` step status to see whether the pinned CU actually applied.
+
+The box lands at the **pinned** patch level (a known floor), not necessarily absolute-latest. That's intentional — your normal patch process (Patch Manager, WSUS, etc.) brings it fully current afterward. Two supported modes:
+- **Default (`InstallCumulativeUpdates=true`):** installs the pinned June 2026 OS CU (KB5094123) + .NET CU (KB5087061), then your process trues up.
+- **Skip (`InstallCumulativeUpdates=false`):** no patching for a faster run; your process handles everything.
+
+Either way the box is not silently left thinking it's patched at 2019 levels.
+
+### Raising the Floor (Getting a Newer CU URL)
+
+The operative parameters are the **URLs** (`PinnedCumulativeUpdateUrl`, `PinnedDotNetUpdateUrl`); the KB id is parsed from each URL automatically for log messages. To pin a newer CU, open the [Microsoft Update Catalog](https://www.catalog.update.microsoft.com), search the KB (e.g. the latest "Cumulative Update for Windows Server 2019 ... x64"), click **Download**, and copy the `.msu` link.
+
+Notes:
+- OS CU = the combined **SSU+LCU** x64 `.msu` (language/edition-neutral). The automation extracts it and installs the SSU cab before the LCU cab.
+- .NET CU = the **.NET 3.5/4.7.2** x64 `.msu` (KB5087061 family) for stock Server 2019. If a box runs .NET 4.8, that's the customer's installed runtime (preserved by the upgrade) and is patched by their own process.
+- Update the `Url` parameter. The KB id is parsed from the URL automatically and used both to label logs and to verify (via `Get-HotFix`) that the exact pinned CU installed.
+
+## Rollback
+
+If `AutoRollback=true` and the upgrade fails or a boot loop is detected:
+
+1. The upgrade volume is cleaned up
+2. The backup snapshot is retrieved from the pre-upgrade AMI
+3. [EC2 Replace Root Volume](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/replace-root.html) restores the original root volume
+4. The temporary upgrade profile is removed (if the automation attached one)
+5. A failure notification is sent (if SNS topic configured)
+
+If `AutoRollback=false` (default), the automation fails and leaves the instance in its current state for investigation.
+
+### Manual Rollback
+
+If automatic rollback is disabled or fails:
+
+```powershell
+# Run from CloudShell (region auto-detected)
+$InstanceId = 'i-0123456789abcdef0'
+$execId = 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'
+
+# Get backup AMI ID from automation outputs
+$exec = Get-SSMAutomationExecution -AutomationExecutionId $execId
+$amiId = $exec.Outputs['CreateBackupImage.BackupImageId']
+
+# Get the snapshot ID from the AMI (required if root volume was expanded)
+$ami = Get-EC2Image -ImageId $amiId
+$snapshotId = ($ami.BlockDeviceMappings |
+    Where-Object { $_.DeviceName -eq '/dev/sda1' }).Ebs.SnapshotId
+
+# Replace root volume from snapshot
+# Note: Use snapshot (not AMI) if root volume size was increased during upgrade,
+# because EC2 Replace Root Volume requires matching volume size when using AMI directly
+# https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/replace-root.html
+New-EC2ReplaceRootVolumeTask `
+    -InstanceId $InstanceId `
+    -SnapshotId $snapshotId `
+    -VolumeInitializationRate 300 `
+    -DeleteReplacedRootVolume $true
+```
+
+## Troubleshooting
+
+### Manual in-place upgrade (fallback)
+
+If the automation fails for any reason and you need to proceed, AWS documents the manual in-place upgrade procedure here: [Perform an in-place upgrade of the Windows OS on your EC2 instance](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/os-inplaceupgrade.html). This automation implements the same overall flow (backup, drivers, installation-media volume, `setup.exe /auto upgrade`); the AWS guide is the authoritative manual reference if you need to run the steps by hand or diagnose a specific stage.
+
+### PreUpgradeCheck fails with EC2Config error
+
+EC2Config is not supported on Windows 2019. Migrate to EC2Launch first: [EC2Launch docs](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2launch.html)
+
+### CheckXenSriovCompatibility fails
+
+C3, C4, D2, I2, M4 (except m4.16xlarge), R3 with SR-IOV are not supported. Migrate to a newer instance type (e.g. C5, M5, R4/R5, I3, D3) before upgrading.
+
+### Upgrade times out
+
+Check SSM Automation execution details for step outputs. Check Windows Setup logs on instance: `C:\$WINDOWS.~BT\Sources\Panther\`
+
+### Disk expansion fails
+
+C: must be the last partition on the disk to auto-expand. MBR disks cannot exceed 2TB.
+
+## Observed Upgrade Times
+
+30GB root volume, gp3:
+
+| Instance Type | Platform | Upgrade | Total |
+|---------------|----------|---------|-------|
+| c8id.xlarge | Nitro | ~15 min | ~52 min |
+| m8a.2xlarge | Nitro AMD | ~15 min | ~40 min |
+| m8a.xlarge | Nitro AMD | ~20 min | ~44 min |
+| t3.large | Nitro | ~21 min | ~58 min |
+| m8i.2xlarge | Nitro Intel | ~23 min | ~50 min |
+| t3a.large | Nitro AMD | ~25 min | ~67 min |
+| t2.2xlarge | Xen | ~27 min | ~63 min |
+| t2.xlarge | Xen | ~27 min | ~62 min |
+| t2.large | Xen | ~29 min | ~64 min |
+
+Total time includes pre-upgrade steps (backup AMI, reboot, disk expansion, driver updates) and post-upgrade Windows Updates. Actual times vary depending on Windows Update availability.

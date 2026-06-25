@@ -1,0 +1,10 @@
+{
+  "label": "Windows 2016 to 2019 Inplace Upgrade",
+  "position": 4,
+  "collapsible": true,
+  "collapsed": false,
+  "link": {
+    "type": "generated-index",
+    "description": "Automated SSM solution for upgrading EC2 instances from Windows Server 2016 to Windows Server 2019"
+  }
+}

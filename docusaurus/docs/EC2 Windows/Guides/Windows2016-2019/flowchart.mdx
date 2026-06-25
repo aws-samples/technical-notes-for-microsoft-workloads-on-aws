@@ -1,0 +1,79 @@
+---
+title: Automation Flowchart
+description: Visual flowchart showing the step-by-step execution paths for the Windows Server 2016 to 2019 in-place upgrade automation
+sidebar_position: 4
+---
+
+# Automation Flowchart
+
+This diagram shows the full execution flow of the upgrade automation, including the DryRun path, the happy path, rollback, and failure cleanup paths.
+
+```mermaid
+flowchart TD
+    Start([Start: Windows-2016-to-2019-Upgrade]) --> DryRunBranch{DryRun?}
+
+    DryRunBranch -->|true| PreCheckOnly[Run PreCheck document<br/>report results, no changes]
+    PreCheckOnly --> EndDryRun([End])
+
+    DryRunBranch -->|false| EnsureAccess[EnsureSsmAccess<br/>use existing SSM instance profile, or attach temp profile if none, or fail if profile lacks SSM]
+    EnsureAccess --> Preflight[RunPreflightChecks]
+    Preflight --> Backup[CreateBackupImage<br/>AMI + reboot]
+    Backup --> Deprecate[DeprecateBackupImage<br/>set retention date]
+    Deprecate --> WaitReboot[WaitForInstanceAfterReboot<br/>poll SSM offline then online]
+    WaitReboot --> UpdateAgent[UpdateSSMAgent]
+    UpdateAgent --> DiskCheck[CheckDiskSpaceAndExpand<br/>expand EBS + extend C: if needed]
+    DiskCheck --> FindMedia[FindWindows2019Snapshot<br/>detect OS language]
+    FindMedia --> CreateVol[CreateUpgradeVolume<br/>GP3 from snapshot]
+    CreateVol --> Drivers[Install drivers<br/>ENA, PV, NVMe]
+    Drivers --> AttachVol[AttachUpgradeVolume]
+    AttachVol --> MountVol[InitializeAndMountVolume<br/>verify setup.exe]
+    MountVol --> Upgrade[PerformUpgrade<br/>setup.exe /auto upgrade]
+    Upgrade --> Verify{Verification loop<br/>OS = 2019?}
+
+    Verify -->|success| CleanupVol[CleanupUpgradeVolume]
+    CleanupVol --> CUBranch{InstallCumulativeUpdates?}
+    CUBranch -->|false| RemoveRecovery
+    CUBranch -->|true| InstallCU[InstallPinnedUpdates<br/>OS SSU+LCU + .NET LCU via DISM<br/>best-effort: onFailure Continue]
+    InstallCU --> RebootCU[RebootAfterUpdates] --> WaitCU[WaitForInstanceAfterUpdates]
+    WaitCU --> VerifyCU[VerifyPatchLevel<br/>OS CU installed, activity-aware]
+    VerifyCU --> RemoveRecovery[RemoveRecoveryPartition<br/>reclaim space]
+    RemoveRecovery --> RestoreRole[RemoveTempProfile<br/>onFailure: Abort]
+    RestoreRole --> Notify[SendSuccessNotification]
+    Notify --> EndSuccess([End: SUCCESS])
+
+    Verify -->|failure / boot loop| RollbackBranch{AutoRollback?}
+
+    RollbackBranch -->|true| RbCleanup[RollbackCleanupUpgradeVolume]
+    RbCleanup --> RbSnapshot[Get backup snapshot]
+    RbSnapshot --> RbReplace[ReplaceRootVolume<br/>restore pre-upgrade root]
+    RbReplace --> RbRestoreRole[RollbackRemoveTempProfile<br/>onFailure: Abort]
+    RbRestoreRole --> RbNotify[RollbackSendNotification]
+    RbNotify --> EndRollback([End: ROLLED BACK])
+
+    RollbackBranch -->|false| FailCleanup[FailCleanupUpgradeVolume]
+    FailCleanup --> FailRestoreRole[FailRemoveTempProfile<br/>onFailure: Abort]
+    FailRestoreRole --> FailEnd[FailWithoutRollback<br/>raise error]
+    FailEnd --> EndFail([End: FAILED])
+
+    %% --- Failure cleanup paths (best-effort, then fail loud) ---
+    Preflight -. on failure .-> CleanupTPOF["CleanupTempProfileOnFailure<br/>remove temp profile if attached, then fail loud"]
+    CleanupTPOF --> EndFail
+    AttachVol -. on failure .-> FailCleanup
+```
+
+## Reading the Diagram
+
+| Path | Description |
+|------|-------------|
+| **DryRun=true** | Runs pre-flight checks only, never modifies the instance |
+| **Happy path** (solid lines down) | Full upgrade: backup → drivers → upgrade → patch → cleanup |
+| **Rollback path** (AutoRollback=true) | On upgrade failure: restore root volume from backup AMI snapshot |
+| **Failure path** (AutoRollback=false) | On upgrade failure: clean up volumes and profiles, then fail loud for investigation |
+| **Dotted lines** | Failure cleanup shortcuts — any step that fails routes to the appropriate cleanup path |
+
+### Key Design Principles
+
+- **No orphaned resources:** Every path (success, failure, rollback) cleans up the upgrade EBS volume and removes any temporary instance profile the automation attached.
+- **Patching is best-effort:** The `InstallPinnedUpdates` → `VerifyPatchLevel` segment uses `onFailure: Continue`. A patch failure never aborts the run — the OS upgrade already succeeded.
+- **Temp profile always removed:** The `RemoveTempProfile` step uses `onFailure: Abort` — if profile removal itself fails (rare: throttling, transient API error), the automation halts loudly so you know to clean up manually.
+- **Existing instance profiles are never modified:** If the instance already has an instance profile (with or without SSM permissions), the automation either uses it or fails with guidance — it never attaches/detaches the instance's own profile.

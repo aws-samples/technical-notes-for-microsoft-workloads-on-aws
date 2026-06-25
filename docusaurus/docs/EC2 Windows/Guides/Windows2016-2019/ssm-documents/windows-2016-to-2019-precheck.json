@@ -1,0 +1,209 @@
+{
+  "schemaVersion": "0.3",
+  "description": "Pre-flight checks for Windows Server 2016 to 2019 in-place upgrade. This document only performs checks and never modifies the instance.",
+  "assumeRole": "{{ AutomationAssumeRole }}",
+  "parameters": {
+    "InstanceId": {
+      "type": "String",
+      "description": "EC2 Instance ID to check"
+    },
+    "AutomationAssumeRole": {
+      "type": "String",
+      "description": "(Optional) IAM role ARN the automation assumes - select WindowsUpgradeAutomationRole (created per iam-roles.md). If left empty, the run uses the invoking user's identity.",
+      "default": ""
+    }
+  },
+  "mainSteps": [
+    {
+      "name": "GetInstanceDetails",
+      "action": "aws:executeAwsApi",
+      "inputs": {
+        "Service": "ec2",
+        "Api": "DescribeInstances",
+        "InstanceIds": ["{{ InstanceId }}"]
+      },
+      "outputs": [
+        {"Name": "AvailabilityZone", "Selector": "$.Reservations[0].Instances[0].Placement.AvailabilityZone", "Type": "String"},
+        {"Name": "InstanceType", "Selector": "$.Reservations[0].Instances[0].InstanceType", "Type": "String"}
+      ]
+    },
+    {
+      "name": "ExtractRegion",
+      "action": "aws:executeScript",
+      "inputs": {
+        "Runtime": "python3.11",
+        "Handler": "script_handler",
+        "Script": "def script_handler(events, context):\n  return {'Region': events['AvailabilityZone'][:-1]}\n",
+        "InputPayload": {"AvailabilityZone": "{{ GetInstanceDetails.AvailabilityZone }}"}
+      },
+      "outputs": [{"Name": "Region", "Selector": "$.Payload.Region", "Type": "String"}]
+    },
+    {
+      "name": "CheckXenSriovCompatibility",
+      "action": "aws:executeScript",
+      "inputs": {
+        "Runtime": "python3.11",
+        "Handler": "script_handler",
+        "Script": "import boto3\nimport re\n\ndef script_handler(events, context):\n  instance_id = events['InstanceId']\n  instance_type = events['InstanceType']\n  region = events['Region']\n  \n  xen_sriov_patterns = [r'^c3\\.', r'^c4\\.', r'^d2\\.', r'^i2\\.', r'^r3\\.']\n  is_m4_sriov = instance_type.startswith('m4.') and instance_type != 'm4.16xlarge'\n  is_xen_sriov_type = is_m4_sriov or any(re.match(p, instance_type) for p in xen_sriov_patterns)\n  \n  if not is_xen_sriov_type:\n    return {'Compatible': 'true', 'Message': 'OK: Instance type compatible (not Xen SR-IOV)'}\n  \n  ec2 = boto3.client('ec2', region_name=region)\n  response = ec2.describe_instance_attribute(InstanceId=instance_id, Attribute='sriovNetSupport')\n  \n  if response.get('SriovNetSupport', {}).get('Value') == 'simple':\n    raise Exception(f'INCOMPATIBLE: Instance {instance_id} has SR-IOV enabled. Migrate to Nitro instance type first.')\n  \n  return {'Compatible': 'true', 'Message': f'OK: Instance type {instance_type} is Xen but SR-IOV not enabled'}\n",
+        "InputPayload": {
+          "InstanceId": "{{ InstanceId }}",
+          "InstanceType": "{{ GetInstanceDetails.InstanceType }}",
+          "Region": "{{ ExtractRegion.Region }}"
+        }
+      },
+      "outputs": [
+        {"Name": "Compatible", "Selector": "$.Payload.Compatible", "Type": "String"},
+        {"Name": "Message", "Selector": "$.Payload.Message", "Type": "String"}
+      ]
+    },
+    {
+      "name": "CheckAutoScalingGroup",
+      "action": "aws:executeScript",
+      "inputs": {
+        "Runtime": "python3.11",
+        "Handler": "script_handler",
+        "Script": "import boto3\n\ndef script_handler(events, context):\n  autoscaling = boto3.client('autoscaling', region_name=events['Region'])\n  response = autoscaling.describe_auto_scaling_instances(InstanceIds=[events['InstanceId']])\n  \n  if response['AutoScalingInstances']:\n    asg_name = response['AutoScalingInstances'][0]['AutoScalingGroupName']\n    raise Exception(f'INCOMPATIBLE: Instance is part of ASG \"{asg_name}\". In-place upgrades not supported for ASG instances.')\n  \n  return {'Message': 'OK: Instance is not part of an Auto Scaling Group'}\n",
+        "InputPayload": {"InstanceId": "{{ InstanceId }}", "Region": "{{ ExtractRegion.Region }}"}
+      },
+      "outputs": [{"Name": "Message", "Selector": "$.Payload.Message", "Type": "String"}]
+    },
+    {
+      "name": "CheckInstanceRole",
+      "action": "aws:executeScript",
+      "inputs": {
+        "Runtime": "python3.11",
+        "Handler": "script_handler",
+        "Script": "import boto3\nimport json\n\ndef script_handler(events, context):\n  instance_id = events['InstanceId']\n  region = events['Region']\n  \n  ec2 = boto3.client('ec2', region_name=region)\n  iam = boto3.client('iam')\n  \n  response = ec2.describe_instances(InstanceIds=[instance_id])\n  instance = response['Reservations'][0]['Instances'][0]\n  \n  current_profile_arn = instance.get('IamInstanceProfile', {}).get('Arn', '')\n  \n  if not current_profile_arn:\n    return {\n      'HasSSMPermissions': 'false',\n      'CurrentProfileName': '',\n      'Message': 'No IAM instance profile attached'\n    }\n  \n  profile_name = current_profile_arn.split('/')[-1]\n  \n  try:\n    profile_response = iam.get_instance_profile(InstanceProfileName=profile_name)\n    roles = profile_response['InstanceProfile'].get('Roles', [])\n    \n    if not roles:\n      return {'HasSSMPermissions': 'false', 'CurrentProfileName': profile_name, 'Message': f'Profile {profile_name} has no role'}\n    \n    role_name = roles[0]['RoleName']\n    attached_policies = iam.list_attached_role_policies(RoleName=role_name)['AttachedPolicies']\n    \n    has_ssm = any('AmazonSSMManagedInstanceCore' in p['PolicyArn'] or 'AmazonEC2RoleforSSM' in p['PolicyArn'] for p in attached_policies)\n    \n    if has_ssm:\n      return {'HasSSMPermissions': 'true', 'CurrentProfileName': profile_name, 'Message': f'OK: Role {role_name} has SSM permissions'}\n    \n    # Check inline and customer managed policies\n    all_policy_docs = []\n    for policy_name in iam.list_role_policies(RoleName=role_name)['PolicyNames']:\n      doc = iam.get_role_policy(RoleName=role_name, PolicyName=policy_name)['PolicyDocument']\n      all_policy_docs.append(json.dumps(doc).lower())\n    \n    for p in attached_policies:\n      if ':iam::' in p['PolicyArn'] and ':policy/' in p['PolicyArn']:\n        try:\n          policy = iam.get_policy(PolicyArn=p['PolicyArn'])\n          version = iam.get_policy_version(PolicyArn=p['PolicyArn'], VersionId=policy['Policy']['DefaultVersionId'])\n          all_policy_docs.append(json.dumps(version['PolicyVersion']['Document']).lower())\n        except: pass\n    \n    combined = ' '.join(all_policy_docs)\n    if 'ssm:' in combined and 'ssmmessages:' in combined:\n      return {'HasSSMPermissions': 'true', 'CurrentProfileName': profile_name, 'Message': f'OK: Role {role_name} has SSM permissions'}\n    \n    return {'HasSSMPermissions': 'false', 'CurrentProfileName': profile_name, 'Message': f'Role {role_name} lacks SSM permissions'}\n    \n  except Exception as e:\n    return {'HasSSMPermissions': 'false', 'CurrentProfileName': profile_name, 'Message': f'Error checking role: {e}'}\n",
+        "InputPayload": {"InstanceId": "{{ InstanceId }}", "Region": "{{ ExtractRegion.Region }}"}
+      },
+      "outputs": [
+        {"Name": "HasSSMPermissions", "Selector": "$.Payload.HasSSMPermissions", "Type": "String"},
+        {"Name": "CurrentProfileName", "Selector": "$.Payload.CurrentProfileName", "Type": "String"},
+        {"Name": "Message", "Selector": "$.Payload.Message", "Type": "String"}
+      ]
+    },
+    {
+      "name": "CheckInstanceStoreAndPublicIP",
+      "action": "aws:executeScript",
+      "inputs": {
+        "Runtime": "python3.11",
+        "Handler": "script_handler",
+        "Script": "import boto3\n\ndef script_handler(events, context):\n  instance_id = events['InstanceId']\n  region = events['Region']\n  ec2 = boto3.client('ec2', region_name=region)\n  \n  response = ec2.describe_instances(InstanceIds=[instance_id])\n  instance = response['Reservations'][0]['Instances'][0]\n  instance_type = instance['InstanceType']\n  \n  warnings = []; notes = []\n  \n  # Check instance store\n  instance_store_devices = [bdm['DeviceName'] for bdm in instance.get('BlockDeviceMappings', []) if 'Ebs' not in bdm]\n  type_info = ec2.describe_instance_types(InstanceTypes=[instance_type])['InstanceTypes'][0]\n  has_instance_store = type_info.get('InstanceStorageSupported', False)\n  \n  if instance_store_devices or has_instance_store:\n    devices_str = ', '.join(instance_store_devices) if instance_store_devices else 'ephemeral storage available'\n    notes.append(f'INFO: Instance store ({devices_str}) present - preserved across the upgrade (reboot only, no stop/start)')\n  \n  # Check public IP\n  public_ip = instance.get('PublicIpAddress')\n  if public_ip:\n    eip_response = ec2.describe_addresses(Filters=[{'Name': 'public-ip', 'Values': [public_ip]}])\n    if not eip_response['Addresses']:\n      notes.append(f'INFO: Dynamic public IP ({public_ip}) is retained across the upgrade (reboot only; changes only on stop/start)')\n  \n  summary = [f'Instance ID: {instance_id}', f'Instance Type: {instance_type}', f'AZ: {instance[\"Placement\"][\"AvailabilityZone\"]}']\n  if public_ip:\n    summary.append(f'Public IP: {public_ip}')\n  summary.append('')\n  summary.extend(notes); summary.extend(warnings if warnings else ['No warnings'])\n  \n  result = '\\n'.join(summary)\n  print(result)\n  return {'Summary': result, 'HasWarnings': 'true' if warnings else 'false'}\n",
+        "InputPayload": {"InstanceId": "{{ InstanceId }}", "Region": "{{ ExtractRegion.Region }}"}
+      },
+      "outputs": [
+        {"Name": "Summary", "Selector": "$.Payload.Summary", "Type": "String"},
+        {"Name": "HasWarnings", "Selector": "$.Payload.HasWarnings", "Type": "String"}
+      ]
+    },
+    {
+      "name": "BranchOnSSMPermissions",
+      "action": "aws:branch",
+      "inputs": {
+        "Choices": [{"NextStep": "PreUpgradeCheck", "Variable": "{{ CheckInstanceRole.HasSSMPermissions }}", "StringEquals": "true"}],
+        "Default": "PrecheckCompleteNoSSM"
+      }
+    },
+    {
+      "name": "PreUpgradeCheck",
+      "action": "aws:runCommand",
+      "inputs": {
+        "DocumentName": "AWS-RunPowerShellScript",
+        "InstanceIds": ["{{ InstanceId }}"],
+        "Parameters": {
+          "commands": [
+            "$ErrorActionPreference = 'Stop'",
+            "",
+            "$os = Get-WmiObject -Class Win32_OperatingSystem",
+            "if ($os.Caption -notmatch 'Windows Server 2016') { throw 'ERROR: Not Windows Server 2016. Found: ' + $os.Caption }",
+            "Write-Output 'OK: Running Windows Server 2016'",
+            "",
+            "$ssm = Get-Service -Name AmazonSSMAgent",
+            "if ($ssm.Status -ne 'Running') { throw 'ERROR: SSM Agent not running' }",
+            "Write-Output 'OK: SSM Agent running'",
+            "",
+            "if (Test-Path 'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Component Based Servicing\\RebootPending') { throw 'ERROR: Reboot pending' }",
+            "Write-Output 'OK: No pending reboot'",
+            "",
+            "$ec2Config = Get-Service -Name 'Ec2Config' -ErrorAction SilentlyContinue",
+            "if ($ec2Config) { throw 'ERROR: EC2Config detected. Migrate to EC2Launch before upgrading.' }",
+            "Write-Output 'OK: EC2Config not present'",
+            "",
+            "$cPartition = Get-Partition -DriveLetter C",
+            "$diskNumber = $cPartition.DiskNumber",
+            "$allPartitions = Get-Partition -DiskNumber $diskNumber | Where-Object { $_.Type -ne 'Reserved' -and $_.Size -gt 1MB }",
+            "$partitionCount = ($allPartitions | Measure-Object).Count",
+            "$lastPartition = $allPartitions | Sort-Object -Property Offset | Select-Object -Last 1",
+            "$cIsLast = ($lastPartition.DriveLetter -eq 'C')",
+            "$freeGB = [math]::Round((Get-PSDrive C).Free / 1GB, 2)",
+            "if ($freeGB -lt 20 -and $partitionCount -gt 1 -and -not $cIsLast) {",
+            "  throw \"ERROR: Insufficient disk space ($freeGB GB) and C: is not the last partition\"",
+            "}",
+            "Write-Output 'OK: Disk layout compatible'",
+            "",
+            "$diskInfo = Get-Disk -Number $diskNumber",
+            "$diskSizeGB = [math]::Round($diskInfo.Size / 1GB, 2)",
+            "if ($diskInfo.PartitionStyle -eq 'MBR' -and $freeGB -lt 20 -and $diskSizeGB -ge 2048) {",
+            "  throw 'ERROR: MBR disk at 2TB limit with insufficient space'",
+            "}",
+            "Write-Output 'OK: Disk size within limits'",
+            "",
+            "Write-Output \"INFO: ${freeGB}GB free space on C:\"",
+            "",
+            "$osLang = $os.OSLanguage",
+            "Write-Output \"OSLANGUAGE: ${osLang}\""
+          ]
+        }
+      },
+      "outputs": [{"Name": "CheckOutput", "Selector": "$.Output", "Type": "String"}]
+    },
+    {
+      "name": "PrecheckComplete",
+      "action": "aws:executeScript",
+      "isEnd": true,
+      "inputs": {
+        "Runtime": "python3.11",
+        "Handler": "script_handler",
+        "Script": "def script_handler(events, context):\n  print('=== PRE-CHECK COMPLETE ===')\n  print('')\n  print(events['Summary'])\n  print('')\n  print(f\"Role: {events['RoleMessage']}\")\n  print('')\n  print(events['OSChecks'])\n  print('')\n  os_lang = '1033'\n  for line in events['OSChecks'].split('\\n'):\n    if line.startswith('OSLANGUAGE:'):\n      os_lang = line.split(':')[1].strip()\n  supported = ['1028','1029','1031','1033','1034','1036','1038','1040','1041','1042','1043','1045','1046','1049','1053','1055','2070','3082']\n  if os_lang not in supported:\n    raise Exception(f'INCOMPATIBLE: OS language LCID {os_lang} is not supported for in-place upgrade. Supported LCIDs: {supported}')\n  print('All checks passed.')\n  return {'Status': 'Complete', 'OSChecksRan': 'true', 'OSLanguage': os_lang}\n",
+        "InputPayload": {
+          "Summary": "{{ CheckInstanceStoreAndPublicIP.Summary }}",
+          "RoleMessage": "{{ CheckInstanceRole.Message }}",
+          "OSChecks": "{{ PreUpgradeCheck.CheckOutput }}"
+        }
+      },
+      "outputs": [
+        {"Name": "OSChecksRan", "Selector": "$.Payload.OSChecksRan", "Type": "String"},
+        {"Name": "OSLanguage", "Selector": "$.Payload.OSLanguage", "Type": "String"}
+      ]
+    },
+    {
+      "name": "PrecheckCompleteNoSSM",
+      "action": "aws:executeScript",
+      "isEnd": true,
+      "inputs": {
+        "Runtime": "python3.11",
+        "Handler": "script_handler",
+        "Script": "def script_handler(events, context):\n  print('=== PRE-CHECK COMPLETE (PARTIAL) ===')\n  print('')\n  print(events['Summary'])\n  print('')\n  print(f\"Role: {events['RoleMessage']}\")\n  print('')\n  print('NOTE: Unable to run OS checks - instance lacks SSM permissions.')\n  print('OS checks include: Windows version, pending reboot, EC2Config, disk space/layout.')\n  print('')\n  print('API-based checks passed. Attach an SSM-enabled role to run full checks.')\n  return {'Status': 'PartialComplete', 'OSChecksRan': 'false', 'OSLanguage': '1033'}\n",
+        "InputPayload": {
+          "Summary": "{{ CheckInstanceStoreAndPublicIP.Summary }}",
+          "RoleMessage": "{{ CheckInstanceRole.Message }}"
+        }
+      },
+      "outputs": [
+        {"Name": "OSChecksRan", "Selector": "$.Payload.OSChecksRan", "Type": "String"},
+        {"Name": "OSLanguage", "Selector": "$.Payload.OSLanguage", "Type": "String"}
+      ]
+    }
+  ],
+  "outputs": [
+    "ExtractRegion.Region",
+    "GetInstanceDetails.AvailabilityZone",
+    "CheckInstanceRole.HasSSMPermissions",
+    "CheckInstanceRole.CurrentProfileName",
+    "CheckInstanceRole.Message",
+    "CheckInstanceStoreAndPublicIP.Summary",
+    "CheckInstanceStoreAndPublicIP.HasWarnings",
+    "PrecheckComplete.OSLanguage"
+  ]
+}
+
