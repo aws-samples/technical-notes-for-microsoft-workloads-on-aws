@@ -1,0 +1,1258 @@
+{
+  "schemaVersion": "0.3",
+  "description": "Automated in-place upgrade from Windows Server 2016 to 2019. Supports 17 OS languages. Pre-flight checks, AMI backup, driver updates (ENA/PV/NVMe), in-place upgrade via AWS media, deterministic pinned OS + .NET cumulative updates (so the box is not left at the 2019 baseline), and cleanup. InstallCumulativeUpdates=false skips patching. DryRun=true runs checks only.",
+  "assumeRole": "{{ AutomationAssumeRole }}",
+  "parameters": {
+    "InstanceId": {
+      "type": "String",
+      "description": "(Required) EC2 instance ID to upgrade. Must be running Windows Server 2016."
+    },
+    "AutomationAssumeRole": {
+      "type": "String",
+      "description": "(Optional) IAM role ARN the automation assumes - select WindowsUpgradeAutomationRole (created per iam-roles.md). It needs EC2, SSM, IAM, and SNS permissions. If left empty, the run uses the invoking user's identity, whose temporary credentials can expire during this long, multi-reboot upgrade - so providing the role is strongly recommended.",
+      "default": ""
+    },
+    "BackupRetentionDays": {
+      "type": "String",
+      "description": "(Optional) Number of days to retain the pre-upgrade backup AMI. The AMI is tagged with a DeleteAfter date and deprecated after this period.",
+      "default": "30"
+    },
+    "UpgradeInstanceProfileName": {
+      "type": "String",
+      "description": "(Optional) Instance profile attached ONLY if the target instance has no IAM role; removed at the end of the run. Never used when the instance already has an SSM-capable role. May be an existing SSM-enabled instance profile (must carry AmazonSSMManagedInstanceCore) - useful when you cannot create new IAM resources. If set to a profile other than the default, the automation role's iam:PassRole must allow the role inside it.",
+      "default": "WindowsUpgradeInstanceProfile"
+    },
+    "WaitForBackupAMI": {
+      "type": "String",
+      "description": "(Optional) Wait for backup AMI to reach available state before proceeding. Set to false for faster execution.",
+      "default": "false",
+      "allowedValues": [
+        "true",
+        "false"
+      ]
+    },
+    "NotificationTopicArn": {
+      "type": "String",
+      "description": "(Optional) SNS topic ARN for success and rollback notifications. (A plain failure without rollback does not publish.)",
+      "default": ""
+    },
+    "InstallCumulativeUpdates": {
+      "type": "String",
+      "description": "(Optional) Install pinned OS + .NET cumulative updates after upgrade so the instance is not left at the 2019 media baseline. false = skip patching for a faster run and use your own process. Defender self-updates regardless. Best-effort: a patch failure does not fail the run (the OS upgrade is the goal); the box is left upgraded and you apply the CU via your own process.",
+      "default": "true",
+      "allowedValues": [
+        "true",
+        "false"
+      ]
+    },
+    "PinnedCumulativeUpdateUrl": {
+      "type": "String",
+      "description": "(Optional) Microsoft Update Catalog .msu URL of the Server 2019 OS cumulative update (combined SSU+LCU, x64). Upgrade media lands at 17763.737; WU delays surfacing the current CU, so this installs it deterministically. Default = June 2026 (KB5094123). See README to obtain a newer URL. Empty = skip OS CU. The KB id is parsed from the URL for logging.",
+      "default": "https://catalog.s.download.windowsupdate.com/c/msdownload/update/software/secu/2026/06/windows10.0-kb5094123-x64_150ef9e518c1e534d2d255a558c4d2bdefe54073.msu"
+    },
+    "PinnedDotNetUpdateUrl": {
+      "type": "String",
+      "description": "(Optional) Catalog .msu URL of the Server 2019 .NET Framework cumulative update (x64). Upgrade resets in-box .NET 4.7.2 to Sept-2019; this brings it current. Default = KB5087061 (.NET 3.5/4.7.2). Empty = skip .NET CU. The KB id is parsed from the URL for logging.",
+      "default": "https://catalog.s.download.windowsupdate.com/d/msdownload/update/software/secu/2026/04/windows10.0-kb5087061-x64_25b4ce6e32862a6288609b4471ff1cd8e07d8e3f.msu"
+    },
+    "DryRun": {
+      "type": "String",
+      "description": "(Optional) Run pre-flight checks only without making any changes to the instance.",
+      "default": "false",
+      "allowedValues": [
+        "true",
+        "false"
+      ]
+    },
+    "AutoRollback": {
+      "type": "String",
+      "description": "(Optional) Automatically restore the original root volume from the backup AMI if the upgrade fails.",
+      "default": "false",
+      "allowedValues": [
+        "true",
+        "false"
+      ]
+    }
+  },
+  "mainSteps": [
+    {
+      "name": "GetInstanceDetails",
+      "action": "aws:executeAwsApi",
+      "inputs": {
+        "Service": "ec2",
+        "Api": "DescribeInstances",
+        "InstanceIds": [
+          "{{ InstanceId }}"
+        ]
+      },
+      "outputs": [
+        {
+          "Name": "AvailabilityZone",
+          "Selector": "$.Reservations[0].Instances[0].Placement.AvailabilityZone",
+          "Type": "String"
+        }
+      ]
+    },
+    {
+      "name": "ExtractRegion",
+      "action": "aws:executeScript",
+      "inputs": {
+        "Runtime": "python3.11",
+        "Handler": "script_handler",
+        "Script": "def script_handler(events, context):\n  return {'Region': events['AZ'][:-1]}\n",
+        "InputPayload": {
+          "AZ": "{{ GetInstanceDetails.AvailabilityZone }}"
+        }
+      },
+      "outputs": [
+        {
+          "Name": "Region",
+          "Selector": "$.Payload.Region",
+          "Type": "String"
+        }
+      ]
+    },
+    {
+      "name": "BranchOnDryRun",
+      "action": "aws:branch",
+      "inputs": {
+        "Choices": [
+          {
+            "NextStep": "RunPreflightChecksDryRun",
+            "Variable": "{{ DryRun }}",
+            "StringEquals": "true"
+          }
+        ],
+        "Default": "EnsureSsmAccess"
+      }
+    },
+    {
+      "name": "RunPreflightChecksDryRun",
+      "action": "aws:executeAutomation",
+      "inputs": {
+        "DocumentName": "Windows-2016-to-2019-PreCheck",
+        "RuntimeParameters": {
+          "InstanceId": [
+            "{{ InstanceId }}"
+          ],
+          "AutomationAssumeRole": [
+            "{{ AutomationAssumeRole }}"
+          ]
+        }
+      },
+      "outputs": [
+        {
+          "Name": "HasSSMPermissions",
+          "Selector": "$.Output[2]",
+          "Type": "String"
+        },
+        {
+          "Name": "CurrentProfileName",
+          "Selector": "$.Output[3]",
+          "Type": "String"
+        },
+        {
+          "Name": "RoleMessage",
+          "Selector": "$.Output[4]",
+          "Type": "String"
+        },
+        {
+          "Name": "Summary",
+          "Selector": "$.Output[5]",
+          "Type": "String"
+        }
+      ],
+      "nextStep": "DryRunComplete"
+    },
+    {
+      "name": "DryRunComplete",
+      "action": "aws:executeScript",
+      "isEnd": true,
+      "inputs": {
+        "Runtime": "python3.11",
+        "Handler": "script_handler",
+        "Script": "def script_handler(events, context):\n  print('=== DRY RUN COMPLETE ===')\n  print('')\n  print('Pre-flight checks completed. Run with DryRun=false to perform upgrade.')\n  return {'Status': 'DryRunComplete'}\n",
+        "InputPayload": {}
+      }
+    },
+    {
+      "name": "EnsureSsmAccess",
+      "action": "aws:executeScript",
+      "inputs": {
+        "Runtime": "python3.11",
+        "Handler": "script_handler",
+        "Script": "import boto3\nimport json\nimport time\n\ndef script_handler(events, context):\n  instance_id = events['InstanceId']\n  region = events['Region']\n  upgrade_profile_name = events['UpgradeInstanceProfileName']\n  ec2 = boto3.client('ec2', region_name=region)\n  iam = boto3.client('iam')\n  ssm = boto3.client('ssm', region_name=region)\n  instance = ec2.describe_instances(InstanceIds=[instance_id])['Reservations'][0]['Instances'][0]\n  current_profile_arn = instance.get('IamInstanceProfile', {}).get('Arn', '')\n  if current_profile_arn:\n    profile_name = current_profile_arn.split('/')[-1]\n    has_ssm = False\n    try:\n      roles = iam.get_instance_profile(InstanceProfileName=profile_name)['InstanceProfile'].get('Roles', [])\n      if roles:\n        role_name = roles[0]['RoleName']\n        attached = iam.list_attached_role_policies(RoleName=role_name)['AttachedPolicies']\n        has_ssm = any('AmazonSSMManagedInstanceCore' in p['PolicyArn'] or 'AmazonEC2RoleforSSM' in p['PolicyArn'] for p in attached)\n        if not has_ssm:\n          all_docs = []\n          for pn in iam.list_role_policies(RoleName=role_name)['PolicyNames']:\n            all_docs.append(json.dumps(iam.get_role_policy(RoleName=role_name, PolicyName=pn)['PolicyDocument']).lower())\n          for p in attached:\n            if ':iam::' in p['PolicyArn'] and ':policy/' in p['PolicyArn']:\n              try:\n                pol = iam.get_policy(PolicyArn=p['PolicyArn'])\n                ver = iam.get_policy_version(PolicyArn=p['PolicyArn'], VersionId=pol['Policy']['DefaultVersionId'])\n                all_docs.append(json.dumps(ver['PolicyVersion']['Document']).lower())\n              except: pass\n          combined = ' '.join(all_docs)\n          has_ssm = 'ssm:' in combined and 'ssmmessages:' in combined\n    except Exception as e:\n      print(f'Error checking role: {e}')\n    if has_ssm:\n      return {'TempProfileAttached': 'false', 'Message': 'Existing instance role has SSM permissions'}\n    raise Exception(f'INCOMPATIBLE: Instance role {profile_name} lacks SSM permissions. Add AmazonSSMManagedInstanceCore to the role, or detach it so the automation can attach a temporary upgrade profile. The automation does not modify existing instance roles.')\n  try:\n    iam.get_instance_profile(InstanceProfileName=upgrade_profile_name)\n  except:\n    raise Exception(f'Upgrade profile {upgrade_profile_name} does not exist. See iam-roles.md.')\n  ec2.associate_iam_instance_profile(IamInstanceProfile={'Name': upgrade_profile_name}, InstanceId=instance_id)\n  print(f'Attached temporary profile: {upgrade_profile_name}')\n  time.sleep(30)\n  info = ssm.describe_instance_information(Filters=[{'Key': 'InstanceIds', 'Values': [instance_id]}])['InstanceInformationList']\n  if not (info and info[0].get('PingStatus') == 'Online'):\n    print('Rebooting for SSM...')\n    ec2.reboot_instances(InstanceIds=[instance_id])\n    for i in range(18):\n      time.sleep(10)\n      info = ssm.describe_instance_information(Filters=[{'Key': 'InstanceIds', 'Values': [instance_id]}])['InstanceInformationList']\n      if info and info[0].get('PingStatus') == 'Online': break\n    else:\n      for a in ec2.describe_iam_instance_profile_associations(Filters=[{'Name': 'instance-id', 'Values': [instance_id]}])['IamInstanceProfileAssociations']:\n        if a['State'] == 'associated': ec2.disassociate_iam_instance_profile(AssociationId=a['AssociationId'])\n      raise Exception('SSM agent did not come online after attaching temporary profile; profile removed')\n  return {'TempProfileAttached': 'true', 'Message': f'Attached temporary profile {upgrade_profile_name}'}\n",
+        "InputPayload": {
+          "InstanceId": "{{ InstanceId }}",
+          "Region": "{{ ExtractRegion.Region }}",
+          "UpgradeInstanceProfileName": "{{ UpgradeInstanceProfileName }}"
+        }
+      },
+      "outputs": [
+        {
+          "Name": "TempProfileAttached",
+          "Selector": "$.Payload.TempProfileAttached",
+          "Type": "String"
+        },
+        {
+          "Name": "Message",
+          "Selector": "$.Payload.Message",
+          "Type": "String"
+        }
+      ]
+    },
+    {
+      "name": "RunPreflightChecks",
+      "action": "aws:executeAutomation",
+      "onFailure": "step:CleanupTempProfileOnFailure",
+      "inputs": {
+        "DocumentName": "Windows-2016-to-2019-PreCheck",
+        "RuntimeParameters": {
+          "InstanceId": [
+            "{{ InstanceId }}"
+          ],
+          "AutomationAssumeRole": [
+            "{{ AutomationAssumeRole }}"
+          ]
+        }
+      }
+    },
+    {
+      "name": "CreateBackupImage",
+      "action": "aws:executeAwsApi",
+      "onFailure": "step:CleanupTempProfileOnFailure",
+      "inputs": {
+        "Service": "ec2",
+        "Api": "CreateImage",
+        "InstanceId": "{{ InstanceId }}",
+        "Name": "Pre-Windows-Upgrade-{{ InstanceId }}-{{ global:DATE_TIME }}",
+        "Description": "Backup before Windows 2016 to 2019 upgrade"
+      },
+      "outputs": [
+        {
+          "Name": "BackupImageId",
+          "Selector": "$.ImageId",
+          "Type": "String"
+        }
+      ]
+    },
+    {
+      "name": "BranchOnWaitForAMI",
+      "action": "aws:branch",
+      "inputs": {
+        "Choices": [
+          {
+            "NextStep": "WaitForBackupAMI",
+            "Variable": "{{ WaitForBackupAMI }}",
+            "StringEquals": "true"
+          }
+        ],
+        "Default": "CalculateRetentionDate"
+      }
+    },
+    {
+      "name": "WaitForBackupAMI",
+      "action": "aws:waitForAwsResourceProperty",
+      "onFailure": "step:CleanupTempProfileOnFailure",
+      "timeoutSeconds": 3600,
+      "inputs": {
+        "Service": "ec2",
+        "Api": "DescribeImages",
+        "ImageIds": [
+          "{{ CreateBackupImage.BackupImageId }}"
+        ],
+        "PropertySelector": "$.Images[0].State",
+        "DesiredValues": [
+          "available"
+        ]
+      }
+    },
+    {
+      "name": "CalculateRetentionDate",
+      "action": "aws:executeScript",
+      "onFailure": "step:CleanupTempProfileOnFailure",
+      "inputs": {
+        "Runtime": "python3.11",
+        "Handler": "script_handler",
+        "Script": "from datetime import datetime, timedelta\ndef script_handler(events, context):\n  return {'RetentionDate': (datetime.utcnow() + timedelta(days=int(events['Days']))).strftime('%Y-%m-%d')}\n",
+        "InputPayload": {
+          "Days": "{{ BackupRetentionDays }}"
+        }
+      },
+      "outputs": [
+        {
+          "Name": "RetentionDate",
+          "Selector": "$.Payload.RetentionDate",
+          "Type": "String"
+        }
+      ]
+    },
+    {
+      "name": "TagBackupImage",
+      "action": "aws:createTags",
+      "onFailure": "step:CleanupTempProfileOnFailure",
+      "inputs": {
+        "ResourceType": "EC2",
+        "ResourceIds": [
+          "{{ CreateBackupImage.BackupImageId }}"
+        ],
+        "Tags": [
+          {
+            "Key": "Purpose",
+            "Value": "PreWindowsUpgrade"
+          },
+          {
+            "Key": "SourceInstance",
+            "Value": "{{ InstanceId }}"
+          },
+          {
+            "Key": "DeleteAfter",
+            "Value": "{{ CalculateRetentionDate.RetentionDate }}"
+          }
+        ]
+      }
+    },
+    {
+      "name": "DeprecateBackupImage",
+      "action": "aws:executeAwsApi",
+      "onFailure": "Continue",
+      "inputs": {
+        "Service": "ec2",
+        "Api": "EnableImageDeprecation",
+        "ImageId": "{{ CreateBackupImage.BackupImageId }}",
+        "DeprecateAt": "{{ CalculateRetentionDate.RetentionDate }}T00:00:00Z"
+      }
+    },
+    {
+      "name": "WaitForInstanceAfterReboot",
+      "action": "aws:executeScript",
+      "onFailure": "step:CleanupTempProfileOnFailure",
+      "timeoutSeconds": 300,
+      "inputs": {
+        "Runtime": "python3.11",
+        "Handler": "script_handler",
+        "Script": "import boto3\nimport time\n\ndef script_handler(events, context):\n  ssm = boto3.client('ssm', region_name=events['Region'])\n  instance_id = events['InstanceId']\n  \n  # Wait for SSM agent to go offline (reboot initiated by CreateImage)\n  print('Waiting for reboot to initiate...')\n  for i in range(30):\n    time.sleep(5)\n    info = ssm.describe_instance_information(Filters=[{'Key': 'InstanceIds', 'Values': [instance_id]}])['InstanceInformationList']\n    if not info or info[0].get('PingStatus') != 'Online':\n      print(f'Agent went offline after {(i+1)*5}s')\n      break\n  else:\n    print('Agent never went offline - reboot may have already completed')\n  \n  # Now wait for it to come back online\n  print('Waiting for SSM agent to come back online...')\n  for i in range(60):\n    time.sleep(5)\n    info = ssm.describe_instance_information(Filters=[{'Key': 'InstanceIds', 'Values': [instance_id]}])['InstanceInformationList']\n    if info and info[0].get('PingStatus') == 'Online':\n      print(f'Agent back online after {(i+1)*5}s')\n      return {'Status': 'Online'}\n  raise Exception('SSM agent did not come back online after reboot')\n",
+        "InputPayload": {
+          "InstanceId": "{{ InstanceId }}",
+          "Region": "{{ ExtractRegion.Region }}"
+        }
+      }
+    },
+    {
+      "name": "UpdateSSMAgent",
+      "action": "aws:runCommand",
+      "onFailure": "step:CleanupTempProfileOnFailure",
+      "inputs": {
+        "DocumentName": "AWS-UpdateSSMAgent",
+        "InstanceIds": [
+          "{{ InstanceId }}"
+        ]
+      }
+    },
+    {
+      "name": "CheckDiskSpaceAndExpand",
+      "action": "aws:executeScript",
+      "onFailure": "step:CleanupTempProfileOnFailure",
+      "maxAttempts": 3,
+      "inputs": {
+        "Runtime": "python3.11",
+        "Handler": "script_handler",
+        "Script": "import boto3\nimport time\n\ndef script_handler(events, context):\n  instance_id = events['InstanceId']\n  region = events['Region']\n  ec2 = boto3.client('ec2', region_name=region)\n  ssm = boto3.client('ssm', region_name=region)\n  \n  check_script = '''$freeGB = [math]::Round((Get-PSDrive C).Free / 1GB, 2)\n$cPartition = Get-Partition -DriveLetter C\n$diskNumber = $cPartition.DiskNumber\n$allPartitions = Get-Partition -DiskNumber $diskNumber | Where-Object { $_.Type -ne 'Reserved' -and $_.Size -gt 1MB }\n$partitionCount = ($allPartitions | Measure-Object).Count\n$lastPartition = $allPartitions | Sort-Object -Property Offset | Select-Object -Last 1\n$cIsLast = ($lastPartition.DriveLetter -eq 'C')\n$diskInfo = Get-Disk -Number $diskNumber\n$canExtendGB = [math]::Round(((Get-PartitionSupportedSize -DriveLetter C).SizeMax - $cPartition.Size) / 1GB, 2)\nWrite-Output \"$freeGB|$partitionCount|$cIsLast|$($diskInfo.PartitionStyle)|$canExtendGB\"'''\n  \n  response = ssm.send_command(InstanceIds=[instance_id], DocumentName='AWS-RunPowerShellScript', Parameters={'commands': [check_script]})\n  cmd_id = response['Command']['CommandId']\n  for _ in range(30):\n    time.sleep(2)\n    result = ssm.get_command_invocation(CommandId=cmd_id, InstanceId=instance_id)\n    if result['Status'] in ['Success', 'Failed']: break\n  if result['Status'] != 'Success':\n    raise Exception(f'Disk check failed: {result.get(\"StandardErrorContent\", \"\")}')\n  \n  parts = result['StandardOutputContent'].strip().split('|')\n  free_gb, partition_count, c_is_last, partition_style, can_extend_gb = float(parts[0]), int(parts[1]), parts[2] == 'True', parts[3], float(parts[4])\n  \n  if free_gb >= 20:\n    return {'NeedsExpansion': 'false', 'NeedsPartitionExtend': 'false', 'VolumeId': '', 'NewVolumeSize': 0, 'Message': f'{free_gb}GB free'}\n  \n  needed_gb = 25 - free_gb\n  if can_extend_gb >= needed_gb:\n    return {'NeedsExpansion': 'false', 'NeedsPartitionExtend': 'true', 'VolumeId': '', 'NewVolumeSize': 0, 'Message': 'Will extend partition'}\n  \n  if partition_count > 1 and not c_is_last:\n    raise Exception('Cannot expand - C: is not last partition')\n  \n  instance = ec2.describe_instances(InstanceIds=[instance_id])['Reservations'][0]['Instances'][0]\n  volume_id = next((bdm['Ebs']['VolumeId'] for bdm in instance['BlockDeviceMappings'] if bdm['DeviceName'] == instance['RootDeviceName']), None)\n  if not volume_id: raise Exception('Could not find root volume')\n  \n  volume = ec2.describe_volumes(VolumeIds=[volume_id])['Volumes'][0]\n  new_size = volume['Size'] + int(needed_gb - can_extend_gb) + 1\n  if partition_style == 'MBR' and new_size > 2048: raise Exception('Cannot expand beyond 2TB - MBR limit')\n  \n  return {'NeedsExpansion': 'true', 'NeedsPartitionExtend': 'true', 'VolumeId': volume_id, 'NewVolumeSize': new_size, 'Message': f'Expanding to {new_size}GB'}\n",
+        "InputPayload": {
+          "InstanceId": "{{ InstanceId }}",
+          "Region": "{{ ExtractRegion.Region }}"
+        }
+      },
+      "outputs": [
+        {
+          "Name": "NeedsExpansion",
+          "Selector": "$.Payload.NeedsExpansion",
+          "Type": "String"
+        },
+        {
+          "Name": "NeedsPartitionExtend",
+          "Selector": "$.Payload.NeedsPartitionExtend",
+          "Type": "String"
+        },
+        {
+          "Name": "VolumeId",
+          "Selector": "$.Payload.VolumeId",
+          "Type": "String"
+        },
+        {
+          "Name": "NewVolumeSize",
+          "Selector": "$.Payload.NewVolumeSize",
+          "Type": "Integer"
+        },
+        {
+          "Name": "Message",
+          "Selector": "$.Payload.Message",
+          "Type": "String"
+        }
+      ]
+    },
+    {
+      "name": "BranchOnDiskExpansion",
+      "action": "aws:branch",
+      "inputs": {
+        "Choices": [
+          {
+            "NextStep": "ExpandRootVolume",
+            "Variable": "{{ CheckDiskSpaceAndExpand.NeedsExpansion }}",
+            "StringEquals": "true"
+          },
+          {
+            "NextStep": "ExtendPartitionDiskpart",
+            "Variable": "{{ CheckDiskSpaceAndExpand.NeedsPartitionExtend }}",
+            "StringEquals": "true"
+          }
+        ],
+        "Default": "FindWindows2019Snapshot"
+      }
+    },
+    {
+      "name": "ExpandRootVolume",
+      "action": "aws:executeAwsApi",
+      "onFailure": "step:CleanupTempProfileOnFailure",
+      "inputs": {
+        "Service": "ec2",
+        "Api": "ModifyVolume",
+        "VolumeId": "{{ CheckDiskSpaceAndExpand.VolumeId }}",
+        "Size": "{{ CheckDiskSpaceAndExpand.NewVolumeSize }}"
+      }
+    },
+    {
+      "name": "WaitForVolumeReady",
+      "action": "aws:waitForAwsResourceProperty",
+      "onFailure": "step:CleanupTempProfileOnFailure",
+      "timeoutSeconds": 600,
+      "inputs": {
+        "Service": "ec2",
+        "Api": "DescribeVolumesModifications",
+        "VolumeIds": ["{{ CheckDiskSpaceAndExpand.VolumeId }}"],
+        "PropertySelector": "$.VolumesModifications[0].ModificationState",
+        "DesiredValues": ["optimizing", "completed"]
+      }
+    },
+    {
+      "name": "ExtendPartitionDiskpart",
+      "action": "aws:runCommand",
+      "onFailure": "step:CleanupTempProfileOnFailure",
+      "inputs": {
+        "DocumentName": "AWS-RunPowerShellScript",
+        "InstanceIds": [
+          "{{ InstanceId }}"
+        ],
+        "Parameters": {
+          "commands": [
+            "$ErrorActionPreference = 'Stop'",
+            "Update-Disk -Number 0",
+            "Start-Sleep 5",
+            "$maxSize = (Get-PartitionSupportedSize -DriveLetter C).SizeMax",
+            "$currentSize = (Get-Partition -DriveLetter C).Size",
+            "$canExtendGB = [math]::Round(($maxSize - $currentSize) / 1GB, 2)",
+            "if ($canExtendGB -gt 0.5) {",
+            "  Write-Output \"Extending C: to max (${canExtendGB}GB available)...\"",
+            "  Resize-Partition -DriveLetter C -Size $maxSize",
+            "}",
+            "$freeGB = [math]::Round((Get-PSDrive C).Free / 1GB, 2)",
+            "Write-Output \"Done. Free space: ${freeGB}GB\"",
+            "if ($freeGB -lt 20) { throw \"Insufficient space: ${freeGB}GB\" }"
+          ]
+        }
+      }
+    },
+    {
+      "name": "FindWindows2019Snapshot",
+      "action": "aws:executeScript",
+      "onFailure": "step:CleanupTempProfileOnFailure",
+      "inputs": {
+        "Runtime": "python3.11",
+        "Handler": "script_handler",
+        "Script": "import boto3\nimport time\ndef script_handler(events, context):\n  region = events['Region']\n  instance_id = events['InstanceId']\n  ssm = boto3.client('ssm', region_name=region)\n  cmd = ssm.send_command(InstanceIds=[instance_id], DocumentName='AWS-RunPowerShellScript', Parameters={'commands': ['(Get-WmiObject Win32_OperatingSystem).OSLanguage']})\n  cmd_id = cmd['Command']['CommandId']\n  for _ in range(15):\n    time.sleep(2)\n    r = ssm.get_command_invocation(CommandId=cmd_id, InstanceId=instance_id)\n    if r['Status'] in ['Success','Failed']: break\n  lcid = r.get('StandardOutputContent','').strip()\n  lcid_map = {'1028':'Chinese_Traditional','1029':'Czech','1031':'German','1033':'English','1034':'Spanish','1036':'French','1038':'Hungarian','1040':'Italian','1041':'Japanese','1042':'Korean','1043':'Dutch','1045':'Polish','1046':'Portuguese_Brazil','1049':'Russian','1053':'Swedish','1055':'Turkish','2070':'Portuguese_Portugal','3082':'Spanish'}\n  lang = lcid_map.get(lcid)\n  if not lang: raise Exception(f'Unsupported OS language LCID: {lcid}. Supported: {list(lcid_map.values())}')\n  desc = f'Windows 2019 {lang} Installation Media'\n  print(f'OS language: {lcid} -> {lang}')\n  ec2 = boto3.client('ec2', region_name=region)\n  response = ec2.describe_snapshots(OwnerIds=['amazon'], Filters=[{'Name': 'description', 'Values': [desc]}])\n  if not response['Snapshots']: raise Exception(f'No snapshot found for: {desc}')\n  return {'SnapshotId': sorted(response['Snapshots'], key=lambda x: x['StartTime'], reverse=True)[0]['SnapshotId']}\n",
+        "InputPayload": {
+          "Region": "{{ ExtractRegion.Region }}",
+          "InstanceId": "{{ InstanceId }}"
+        }
+      },
+      "outputs": [
+        {
+          "Name": "SnapshotId",
+          "Selector": "$.Payload.SnapshotId",
+          "Type": "String"
+        }
+      ]
+    },
+    {
+      "name": "CreateUpgradeVolume",
+      "action": "aws:executeAwsApi",
+      "onFailure": "step:CleanupTempProfileOnFailure",
+      "inputs": {
+        "Service": "ec2",
+        "Api": "CreateVolume",
+        "SnapshotId": "{{ FindWindows2019Snapshot.SnapshotId }}",
+        "AvailabilityZone": "{{ GetInstanceDetails.AvailabilityZone }}",
+        "VolumeType": "gp3",
+        "TagSpecifications": [
+          {
+            "ResourceType": "volume",
+            "Tags": [
+              {
+                "Key": "Name",
+                "Value": "Windows2019-Upgrade-{{ InstanceId }}"
+              }
+            ]
+          }
+        ]
+      },
+      "outputs": [
+        {
+          "Name": "VolumeId",
+          "Selector": "$.VolumeId",
+          "Type": "String"
+        }
+      ]
+    },
+    {
+      "name": "InstallEnaDriver",
+      "action": "aws:runCommand",
+      "onFailure": "Continue",
+      "inputs": {
+        "DocumentName": "AWS-ConfigureAWSPackage",
+        "InstanceIds": [
+          "{{ InstanceId }}"
+        ],
+        "Parameters": {
+          "action": [
+            "Install"
+          ],
+          "name": [
+            "AwsEnaNetworkDriver"
+          ]
+        }
+      }
+    },
+    {
+      "name": "InstallPVDriver",
+      "action": "aws:runCommand",
+      "onFailure": "Continue",
+      "inputs": {
+        "DocumentName": "AWS-ConfigureAWSPackage",
+        "InstanceIds": [
+          "{{ InstanceId }}"
+        ],
+        "Parameters": {
+          "action": [
+            "Install"
+          ],
+          "name": [
+            "AWSPVDriver"
+          ]
+        }
+      }
+    },
+    {
+      "name": "InstallNVMeDriver",
+      "action": "aws:runCommand",
+      "onFailure": "Continue",
+      "inputs": {
+        "DocumentName": "AWS-ConfigureAWSPackage",
+        "InstanceIds": [
+          "{{ InstanceId }}"
+        ],
+        "Parameters": {
+          "action": [
+            "Install"
+          ],
+          "name": [
+            "AWSNVMe"
+          ]
+        }
+      }
+    },
+    {
+      "name": "WaitForVolumeAvailable",
+      "action": "aws:waitForAwsResourceProperty",
+      "onFailure": "step:FailCleanupUpgradeVolume",
+      "inputs": {
+        "Service": "ec2",
+        "Api": "DescribeVolumes",
+        "VolumeIds": [
+          "{{ CreateUpgradeVolume.VolumeId }}"
+        ],
+        "PropertySelector": "$.Volumes[0].State",
+        "DesiredValues": [
+          "available"
+        ]
+      }
+    },
+    {
+      "name": "FindAvailableDevice",
+      "action": "aws:executeScript",
+      "onFailure": "step:FailCleanupUpgradeVolume",
+      "inputs": {
+        "Runtime": "python3.11",
+        "Handler": "script_handler",
+        "Script": "import boto3\ndef script_handler(events, context):\n  ec2 = boto3.client('ec2', region_name=events['Region'])\n  instance = ec2.describe_instances(InstanceIds=[events['InstanceId']])['Reservations'][0]['Instances'][0]\n  used = set()\n  for bdm in instance.get('BlockDeviceMappings', []):\n    d = bdm['DeviceName']\n    used.add(d)\n    used.add(d.replace('/dev/sd', '/dev/xvd') if d.startswith('/dev/sd') else d.replace('/dev/xvd', '/dev/sd'))\n  for letter in 'fghijklmnop':\n    if f'/dev/sd{letter}' not in used and f'/dev/xvd{letter}' not in used:\n      return {'Device': f'/dev/sd{letter}'}\n  raise Exception('No available device')\n",
+        "InputPayload": {
+          "InstanceId": "{{ InstanceId }}",
+          "Region": "{{ ExtractRegion.Region }}"
+        }
+      },
+      "outputs": [
+        {
+          "Name": "Device",
+          "Selector": "$.Payload.Device",
+          "Type": "String"
+        }
+      ]
+    },
+    {
+      "name": "AttachUpgradeVolume",
+      "action": "aws:executeAwsApi",
+      "onFailure": "step:FailCleanupUpgradeVolume",
+      "inputs": {
+        "Service": "ec2",
+        "Api": "AttachVolume",
+        "VolumeId": "{{ CreateUpgradeVolume.VolumeId }}",
+        "InstanceId": "{{ InstanceId }}",
+        "Device": "{{ FindAvailableDevice.Device }}"
+      }
+    },
+    {
+      "name": "WaitForVolumeAttached",
+      "action": "aws:waitForAwsResourceProperty",
+      "onFailure": "step:FailCleanupUpgradeVolume",
+      "inputs": {
+        "Service": "ec2",
+        "Api": "DescribeVolumes",
+        "VolumeIds": [
+          "{{ CreateUpgradeVolume.VolumeId }}"
+        ],
+        "PropertySelector": "$.Volumes[0].Attachments[0].State",
+        "DesiredValues": [
+          "attached"
+        ]
+      }
+    },
+    {
+      "name": "InitializeAndMountVolume",
+      "action": "aws:runCommand",
+      "onFailure": "step:FailCleanupUpgradeVolume",
+      "inputs": {
+        "DocumentName": "AWS-RunPowerShellScript",
+        "InstanceIds": [
+          "{{ InstanceId }}"
+        ],
+        "Parameters": {
+          "commands": [
+            "$ErrorActionPreference = 'Stop'",
+            "$volId = '{{ CreateUpgradeVolume.VolumeId }}'",
+            "Update-HostStorageCache; Start-Sleep 10",
+            "$volIdNoDash = $volId -replace 'vol-', 'vol'",
+            "$diskDrive = Get-CimInstance Win32_DiskDrive | Where-Object { $_.SerialNumber -like \"*$volIdNoDash*\" }",
+            "if (-not $diskDrive) { throw \"Could not find disk for $volId\" }",
+            "$diskNumber = [int]($diskDrive.DeviceID -replace '.*PHYSICALDRIVE', '')",
+            "$disk = Get-Disk -Number $diskNumber",
+            "if ($disk.OperationalStatus -eq 'Offline') { Set-Disk -Number $diskNumber -IsOffline $false; Set-Disk -Number $diskNumber -IsReadOnly $false }",
+            "$driveLetter = (68..90 | ForEach-Object { [char]$_ } | Where-Object { -not (Test-Path \"${_}:\") } | Select-Object -First 1)",
+            "$partition = Get-Partition -DiskNumber $diskNumber | Where-Object { $_.Type -ne 'Reserved' } | Select-Object -First 1",
+            "if ($partition -and -not $partition.DriveLetter) { Set-Partition -DiskNumber $diskNumber -PartitionNumber $partition.PartitionNumber -NewDriveLetter $driveLetter }",
+            "elseif ($partition) { $driveLetter = $partition.DriveLetter } else { throw 'No partition found' }",
+            "if (-not (Test-Path \"${driveLetter}:\\sources\\setup.exe\") -and -not (Test-Path \"${driveLetter}:\\setup.exe\")) {",
+            "  $iso = Get-ChildItem \"${driveLetter}:\\\" -Filter *.ISO | Select-Object -First 1",
+            "  if ($iso) { $m = Mount-DiskImage -ImagePath $iso.FullName -PassThru; $driveLetter = ($m | Get-Volume).DriveLetter; Write-Output \"Mounted ISO as ${driveLetter}:\" }",
+            "  else { throw 'Setup not found' }",
+            "}",
+            "New-Item -Path C:\\Temp -ItemType Directory -Force | Out-Null",
+            "Set-Content -Path C:\\Temp\\upgrade-drive.txt -Value $driveLetter",
+            "Write-Output \"Setup found at ${driveLetter}:\""
+          ]
+        }
+      }
+    },
+    {
+      "name": "PerformUpgrade",
+      "action": "aws:runCommand",
+      "timeoutSeconds": 7200,
+      "onFailure": "step:InitialUpgradeWait",
+      "inputs": {
+        "DocumentName": "AWS-RunPowerShellScript",
+        "InstanceIds": [
+          "{{ InstanceId }}"
+        ],
+        "Parameters": {
+          "commands": [
+            "$ErrorActionPreference = 'Stop'",
+            "$drive = Get-Content C:\\Temp\\upgrade-drive.txt",
+            "$os = (Get-WmiObject Win32_OperatingSystem).Caption",
+            "$isCore = -not (Test-Path 'C:\\Windows\\explorer.exe')",
+            "$idx = if ($os -match 'Datacenter') { if ($isCore) { 3 } else { 4 } } else { if ($isCore) { 1 } else { 2 } }",
+            "Set-Location \"${drive}:\"",
+            "Start-Process -FilePath '.\\setup.exe' -ArgumentList \"/auto upgrade /dynamicupdate disable /imageindex $idx\"",
+            "Start-Sleep 10",
+            "if (Get-Process SetupHost -EA SilentlyContinue) { Write-Output 'Upgrade started' } else { Write-Output 'SetupHost not detected yet' }"
+          ]
+        }
+      }
+    },
+    {
+      "name": "InitialUpgradeWait",
+      "action": "aws:sleep",
+      "inputs": {
+        "Duration": "PT15M"
+      },
+      "nextStep": "VerifyUpgrade1"
+    },
+    {
+      "name": "VerifyUpgrade1",
+      "action": "aws:executeScript",
+      "onFailure": "step:Sleep1",
+      "inputs": {
+        "Runtime": "python3.11",
+        "Handler": "script_handler",
+        "Script": "import boto3\nimport time\n\ndef script_handler(events, context):\n  ssm = boto3.client('ssm', region_name=events['Region'])\n  instance_id = events['InstanceId']\n  info = ssm.describe_instance_information(Filters=[{'Key': 'InstanceIds', 'Values': [instance_id]}])['InstanceInformationList']\n  if not info or info[0].get('PingStatus') != 'Online':\n    return {'Result': 'UPGRADE_IN_PROGRESS'}\n  try:\n    cmd = ssm.send_command(InstanceIds=[instance_id], DocumentName='AWS-RunPowerShellScript', Parameters={'commands': [\"$os = (Get-WmiObject Win32_OperatingSystem).Caption; $state = (Get-ItemProperty 'HKLM:\\\\SOFTWARE\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\Setup\\\\State' -EA SilentlyContinue).ImageState; $setup = if (Get-Process SetupHost -EA SilentlyContinue) { 'Running' } else { 'NotRunning' }; if ($state -eq 'IMAGE_STATE_UNDEPLOYABLE') { Write-Output 'FATAL' } elseif ($os -match '2019' -and $state -eq 'IMAGE_STATE_COMPLETE' -and $setup -eq 'NotRunning') { Write-Output 'UPGRADE_COMPLETE' } else { Write-Output 'UPGRADE_IN_PROGRESS' }\"]})\n    cmd_id = cmd['Command']['CommandId']\n  except:\n    return {'Result': 'UPGRADE_IN_PROGRESS'}\n  for _ in range(18):\n    time.sleep(5)\n    try:\n      r = ssm.get_command_invocation(CommandId=cmd_id, InstanceId=instance_id)\n      if r['Status'] in ['Success', 'Failed']:\n        out = r.get('StandardOutputContent', '')\n        if 'FATAL' in out: raise Exception('IMAGE_STATE_UNDEPLOYABLE')\n        if 'UPGRADE_COMPLETE' in out: return {'Result': 'UPGRADE_COMPLETE'}\n        return {'Result': 'UPGRADE_IN_PROGRESS'}\n    except Exception as e:\n      if 'FATAL' in str(e) or 'UNDEPLOYABLE' in str(e): raise\n  return {'Result': 'UPGRADE_IN_PROGRESS'}\n",
+        "InputPayload": {
+          "InstanceId": "{{ InstanceId }}",
+          "Region": "{{ ExtractRegion.Region }}"
+        }
+      },
+      "outputs": [
+        {
+          "Name": "VerifyResult",
+          "Selector": "$.Payload.Result",
+          "Type": "String"
+        }
+      ],
+      "nextStep": "BranchOnVerify1"
+    },
+    {
+      "name": "BranchOnVerify1",
+      "action": "aws:branch",
+      "inputs": {
+        "Choices": [
+          {
+            "NextStep": "CleanupUpgradeVolume",
+            "Variable": "{{ VerifyUpgrade1.VerifyResult }}",
+            "StringEquals": "UPGRADE_COMPLETE"
+          }
+        ],
+        "Default": "Sleep1"
+      }
+    },
+    {
+      "name": "Sleep1",
+      "action": "aws:sleep",
+      "inputs": {
+        "Duration": "PT8M"
+      },
+      "nextStep": "VerifyUpgrade2"
+    },
+    {
+      "name": "VerifyUpgrade2",
+      "action": "aws:executeScript",
+      "onFailure": "step:Sleep2",
+      "inputs": {
+        "Runtime": "python3.11",
+        "Handler": "script_handler",
+        "Script": "import boto3\nimport time\n\ndef script_handler(events, context):\n  ssm = boto3.client('ssm', region_name=events['Region'])\n  instance_id = events['InstanceId']\n  info = ssm.describe_instance_information(Filters=[{'Key': 'InstanceIds', 'Values': [instance_id]}])['InstanceInformationList']\n  if not info or info[0].get('PingStatus') != 'Online':\n    return {'Result': 'UPGRADE_IN_PROGRESS'}\n  try:\n    cmd = ssm.send_command(InstanceIds=[instance_id], DocumentName='AWS-RunPowerShellScript', Parameters={'commands': [\"$os = (Get-WmiObject Win32_OperatingSystem).Caption; $state = (Get-ItemProperty 'HKLM:\\\\SOFTWARE\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\Setup\\\\State' -EA SilentlyContinue).ImageState; $setup = if (Get-Process SetupHost -EA SilentlyContinue) { 'Running' } else { 'NotRunning' }; if ($state -eq 'IMAGE_STATE_UNDEPLOYABLE') { Write-Output 'FATAL' } elseif ($os -match '2019' -and $state -eq 'IMAGE_STATE_COMPLETE' -and $setup -eq 'NotRunning') { Write-Output 'UPGRADE_COMPLETE' } else { Write-Output 'UPGRADE_IN_PROGRESS' }\"]})\n    cmd_id = cmd['Command']['CommandId']\n  except:\n    return {'Result': 'UPGRADE_IN_PROGRESS'}\n  for _ in range(18):\n    time.sleep(5)\n    try:\n      r = ssm.get_command_invocation(CommandId=cmd_id, InstanceId=instance_id)\n      if r['Status'] in ['Success', 'Failed']:\n        out = r.get('StandardOutputContent', '')\n        if 'FATAL' in out: raise Exception('IMAGE_STATE_UNDEPLOYABLE')\n        if 'UPGRADE_COMPLETE' in out: return {'Result': 'UPGRADE_COMPLETE'}\n        return {'Result': 'UPGRADE_IN_PROGRESS'}\n    except Exception as e:\n      if 'FATAL' in str(e) or 'UNDEPLOYABLE' in str(e): raise\n  return {'Result': 'UPGRADE_IN_PROGRESS'}\n",
+        "InputPayload": {
+          "InstanceId": "{{ InstanceId }}",
+          "Region": "{{ ExtractRegion.Region }}"
+        }
+      },
+      "outputs": [
+        {
+          "Name": "VerifyResult",
+          "Selector": "$.Payload.Result",
+          "Type": "String"
+        }
+      ],
+      "nextStep": "BranchOnVerify2"
+    },
+    {
+      "name": "BranchOnVerify2",
+      "action": "aws:branch",
+      "inputs": {
+        "Choices": [
+          {
+            "NextStep": "CleanupUpgradeVolume",
+            "Variable": "{{ VerifyUpgrade2.VerifyResult }}",
+            "StringEquals": "UPGRADE_COMPLETE"
+          }
+        ],
+        "Default": "Sleep2"
+      }
+    },
+    {
+      "name": "Sleep2",
+      "action": "aws:sleep",
+      "inputs": {
+        "Duration": "PT8M"
+      },
+      "nextStep": "VerifyUpgrade3"
+    },
+    {
+      "name": "VerifyUpgrade3",
+      "action": "aws:executeScript",
+      "onFailure": "step:Sleep3",
+      "inputs": {
+        "Runtime": "python3.11",
+        "Handler": "script_handler",
+        "Script": "import boto3\nimport time\n\ndef script_handler(events, context):\n  ssm = boto3.client('ssm', region_name=events['Region'])\n  instance_id = events['InstanceId']\n  info = ssm.describe_instance_information(Filters=[{'Key': 'InstanceIds', 'Values': [instance_id]}])['InstanceInformationList']\n  if not info or info[0].get('PingStatus') != 'Online':\n    return {'Result': 'UPGRADE_IN_PROGRESS'}\n  try:\n    cmd = ssm.send_command(InstanceIds=[instance_id], DocumentName='AWS-RunPowerShellScript', Parameters={'commands': [\"$os = (Get-WmiObject Win32_OperatingSystem).Caption; $state = (Get-ItemProperty 'HKLM:\\\\SOFTWARE\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\Setup\\\\State' -EA SilentlyContinue).ImageState; $setup = if (Get-Process SetupHost -EA SilentlyContinue) { 'Running' } else { 'NotRunning' }; if ($state -eq 'IMAGE_STATE_UNDEPLOYABLE') { Write-Output 'FATAL' } elseif ($os -match '2019' -and $state -eq 'IMAGE_STATE_COMPLETE' -and $setup -eq 'NotRunning') { Write-Output 'UPGRADE_COMPLETE' } else { Write-Output 'UPGRADE_IN_PROGRESS' }\"]})\n    cmd_id = cmd['Command']['CommandId']\n  except:\n    return {'Result': 'UPGRADE_IN_PROGRESS'}\n  for _ in range(18):\n    time.sleep(5)\n    try:\n      r = ssm.get_command_invocation(CommandId=cmd_id, InstanceId=instance_id)\n      if r['Status'] in ['Success', 'Failed']:\n        out = r.get('StandardOutputContent', '')\n        if 'FATAL' in out: raise Exception('IMAGE_STATE_UNDEPLOYABLE')\n        if 'UPGRADE_COMPLETE' in out: return {'Result': 'UPGRADE_COMPLETE'}\n        return {'Result': 'UPGRADE_IN_PROGRESS'}\n    except Exception as e:\n      if 'FATAL' in str(e) or 'UNDEPLOYABLE' in str(e): raise\n  return {'Result': 'UPGRADE_IN_PROGRESS'}\n",
+        "InputPayload": {
+          "InstanceId": "{{ InstanceId }}",
+          "Region": "{{ ExtractRegion.Region }}"
+        }
+      },
+      "outputs": [
+        {
+          "Name": "VerifyResult",
+          "Selector": "$.Payload.Result",
+          "Type": "String"
+        }
+      ],
+      "nextStep": "BranchOnVerify3"
+    },
+    {
+      "name": "BranchOnVerify3",
+      "action": "aws:branch",
+      "inputs": {
+        "Choices": [
+          {
+            "NextStep": "CleanupUpgradeVolume",
+            "Variable": "{{ VerifyUpgrade3.VerifyResult }}",
+            "StringEquals": "UPGRADE_COMPLETE"
+          }
+        ],
+        "Default": "Sleep3"
+      }
+    },
+    {
+      "name": "Sleep3",
+      "action": "aws:sleep",
+      "inputs": {
+        "Duration": "PT8M"
+      },
+      "nextStep": "VerifyUpgrade4"
+    },
+    {
+      "name": "VerifyUpgrade4",
+      "action": "aws:executeScript",
+      "onFailure": "step:VerifyUpgradeFinal",
+      "inputs": {
+        "Runtime": "python3.11",
+        "Handler": "script_handler",
+        "Script": "import boto3\nimport time\n\ndef script_handler(events, context):\n  ssm = boto3.client('ssm', region_name=events['Region'])\n  instance_id = events['InstanceId']\n  info = ssm.describe_instance_information(Filters=[{'Key': 'InstanceIds', 'Values': [instance_id]}])['InstanceInformationList']\n  if not info or info[0].get('PingStatus') != 'Online':\n    return {'Result': 'UPGRADE_IN_PROGRESS'}\n  try:\n    cmd = ssm.send_command(InstanceIds=[instance_id], DocumentName='AWS-RunPowerShellScript', Parameters={'commands': [\"$os = (Get-WmiObject Win32_OperatingSystem).Caption; $state = (Get-ItemProperty 'HKLM:\\\\SOFTWARE\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\Setup\\\\State' -EA SilentlyContinue).ImageState; $setup = if (Get-Process SetupHost -EA SilentlyContinue) { 'Running' } else { 'NotRunning' }; if ($state -eq 'IMAGE_STATE_UNDEPLOYABLE') { Write-Output 'FATAL' } elseif ($os -match '2019' -and $state -eq 'IMAGE_STATE_COMPLETE' -and $setup -eq 'NotRunning') { Write-Output 'UPGRADE_COMPLETE' } else { Write-Output 'UPGRADE_IN_PROGRESS' }\"]})\n    cmd_id = cmd['Command']['CommandId']\n  except:\n    return {'Result': 'UPGRADE_IN_PROGRESS'}\n  for _ in range(18):\n    time.sleep(5)\n    try:\n      r = ssm.get_command_invocation(CommandId=cmd_id, InstanceId=instance_id)\n      if r['Status'] in ['Success', 'Failed']:\n        out = r.get('StandardOutputContent', '')\n        if 'FATAL' in out: raise Exception('IMAGE_STATE_UNDEPLOYABLE')\n        if 'UPGRADE_COMPLETE' in out: return {'Result': 'UPGRADE_COMPLETE'}\n        return {'Result': 'UPGRADE_IN_PROGRESS'}\n    except Exception as e:\n      if 'FATAL' in str(e) or 'UNDEPLOYABLE' in str(e): raise\n  return {'Result': 'UPGRADE_IN_PROGRESS'}\n",
+        "InputPayload": {
+          "InstanceId": "{{ InstanceId }}",
+          "Region": "{{ ExtractRegion.Region }}"
+        }
+      },
+      "outputs": [
+        {
+          "Name": "VerifyResult",
+          "Selector": "$.Payload.Result",
+          "Type": "String"
+        }
+      ],
+      "nextStep": "BranchOnVerify4"
+    },
+    {
+      "name": "BranchOnVerify4",
+      "action": "aws:branch",
+      "inputs": {
+        "Choices": [
+          {
+            "NextStep": "CleanupUpgradeVolume",
+            "Variable": "{{ VerifyUpgrade4.VerifyResult }}",
+            "StringEquals": "UPGRADE_COMPLETE"
+          }
+        ],
+        "Default": "VerifyUpgradeFinal"
+      }
+    },
+    {
+      "name": "VerifyUpgradeFinal",
+      "action": "aws:executeScript",
+      "onFailure": "step:BranchOnAutoRollback",
+      "inputs": {
+        "Runtime": "python3.11",
+        "Handler": "script_handler",
+        "Script": "import boto3\nimport time\n\ndef script_handler(events, context):\n  ssm = boto3.client('ssm', region_name=events['Region'])\n  instance_id = events['InstanceId']\n  for _ in range(60):\n    info = ssm.describe_instance_information(Filters=[{'Key': 'InstanceIds', 'Values': [instance_id]}])['InstanceInformationList']\n    if info and info[0].get('PingStatus') == 'Online': break\n    time.sleep(5)\n  else:\n    raise Exception('SSM agent never came online')\n  cmd = ssm.send_command(InstanceIds=[instance_id], DocumentName='AWS-RunPowerShellScript', Parameters={'commands': [\"$os = (Get-WmiObject Win32_OperatingSystem).Caption; $state = (Get-ItemProperty 'HKLM:\\\\SOFTWARE\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\Setup\\\\State' -EA SilentlyContinue).ImageState; if ($state -eq 'IMAGE_STATE_UNDEPLOYABLE') { Write-Output 'FATAL' } elseif ($os -match '2019' -and $state -eq 'IMAGE_STATE_COMPLETE') { Write-Output 'UPGRADE_COMPLETE' } else { Write-Output 'UPGRADE_IN_PROGRESS' }\"]})\n  cmd_id = cmd['Command']['CommandId']\n  for _ in range(24):\n    time.sleep(5)\n    r = ssm.get_command_invocation(CommandId=cmd_id, InstanceId=instance_id)\n    if r['Status'] in ['Success', 'Failed']:\n      out = r.get('StandardOutputContent', '')\n      if 'FATAL' in out: raise Exception('IMAGE_STATE_UNDEPLOYABLE')\n      if 'UPGRADE_COMPLETE' in out: return {'Result': 'UPGRADE_COMPLETE'}\n      raise Exception(f'Upgrade not complete: {out}')\n  raise Exception('Verify command timed out')\n",
+        "InputPayload": {
+          "InstanceId": "{{ InstanceId }}",
+          "Region": "{{ ExtractRegion.Region }}"
+        }
+      }
+    },
+    {
+      "name": "CleanupUpgradeVolume",
+      "action": "aws:executeScript",
+      "onFailure": "Continue",
+      "inputs": {
+        "Runtime": "python3.11",
+        "Handler": "script_handler",
+        "Script": "import boto3\nimport time\ndef script_handler(events, context):\n  ec2 = boto3.client('ec2', region_name=events['Region'])\n  try:\n    ec2.detach_volume(VolumeId=events['VolumeId'], Force=True)\n    for _ in range(24):\n      if ec2.describe_volumes(VolumeIds=[events['VolumeId']])['Volumes'][0]['State'] == 'available': break\n      time.sleep(5)\n  except: pass\n  try: ec2.delete_volume(VolumeId=events['VolumeId'])\n  except: pass\n  return {'Message': 'Cleaned up'}\n",
+        "InputPayload": {
+          "VolumeId": "{{ CreateUpgradeVolume.VolumeId }}",
+          "Region": "{{ ExtractRegion.Region }}"
+        }
+      }
+    },
+    {
+      "name": "BranchOnInstallCU",
+      "action": "aws:branch",
+      "inputs": {
+        "Choices": [
+          {
+            "NextStep": "InstallPinnedUpdates",
+            "Variable": "{{ InstallCumulativeUpdates }}",
+            "StringEquals": "true"
+          }
+        ],
+        "Default": "RemoveRecoveryPartition"
+      }
+    },
+    {
+      "name": "InstallPinnedUpdates",
+      "action": "aws:runCommand",
+      "timeoutSeconds": 3600,
+      "onFailure": "Continue",
+      "inputs": {
+        "DocumentName": "AWS-RunPowerShellScript",
+        "InstanceIds": [
+          "{{ InstanceId }}"
+        ],
+        "Parameters": {
+          "commands": [
+            "$ErrorActionPreference = 'Stop'",
+            "$ProgressPreference = 'SilentlyContinue'",
+            "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12",
+            "function Install-Msu($url) {",
+            "  if (-not $url) { Write-Output 'Skipping (no URL configured)'; return }",
+            "  $kb = if ($url -match 'kb(\\d+)') { 'KB' + $matches[1] } else { 'update' }",
+            "  $msu = 'C:\\Windows\\Temp\\' + $kb + '.msu'; $ex = 'C:\\Windows\\Temp\\' + $kb + '_ex'",
+            "  Write-Output ('Downloading ' + $kb + ' ...')",
+            "  Start-BitsTransfer -Source $url -Destination $msu",
+            "  Write-Output ('  ' + [math]::Round((Get-Item $msu).Length/1MB,1) + ' MB')",
+            "  Remove-Item $ex -Recurse -Force -ErrorAction SilentlyContinue; New-Item -ItemType Directory -Path $ex | Out-Null",
+            "  expand -f:* $msu $ex | Out-Null",
+            "  $ssu = (Get-ChildItem $ex -Filter 'SSU*.cab' | Select-Object -First 1).FullName",
+            "  if ($ssu) { Write-Output ('  Installing SSU: ' + (Split-Path $ssu -Leaf)); Add-WindowsPackage -Online -PackagePath $ssu -NoRestart | Out-Null }",
+            "  $lcu = (Get-ChildItem $ex -Filter 'Windows10.0-*.cab' | Where-Object { $_.Name -notlike '*WSUSSCAN*' } | Select-Object -First 1).FullName",
+            "  if (-not $lcu) { throw ('LCU cab not found in ' + $kb + ' package') }",
+            "  Write-Output ('  Installing LCU: ' + (Split-Path $lcu -Leaf))",
+            "  Add-WindowsPackage -Online -PackagePath $lcu -NoRestart | Out-Null",
+            "  Remove-Item $msu, $ex -Recurse -Force -ErrorAction SilentlyContinue",
+            "}",
+            "Install-Msu '{{ PinnedCumulativeUpdateUrl }}'",
+            "Install-Msu '{{ PinnedDotNetUpdateUrl }}'",
+            "Write-Output 'Pinned updates staged; reboot required to finalize'"
+          ]
+        }
+      }
+    },
+    {
+      "name": "RebootAfterUpdates",
+      "action": "aws:executeAwsApi",
+      "onFailure": "Continue",
+      "inputs": {
+        "Service": "ec2",
+        "Api": "RebootInstances",
+        "InstanceIds": [
+          "{{ InstanceId }}"
+        ]
+      }
+    },
+    {
+      "name": "WaitForInstanceAfterUpdates",
+      "action": "aws:executeScript",
+      "onFailure": "Continue",
+      "timeoutSeconds": 600,
+      "inputs": {
+        "Runtime": "python3.11",
+        "Handler": "script_handler",
+        "Script": "import boto3\nimport time\n\ndef script_handler(events, context):\n  ssm = boto3.client('ssm', region_name=events['Region'])\n  instance_id = events['InstanceId']\n  print('Waiting for reboot to initiate...')\n  for i in range(30):\n    time.sleep(5)\n    info = ssm.describe_instance_information(Filters=[{'Key': 'InstanceIds', 'Values': [instance_id]}])['InstanceInformationList']\n    if not info or info[0].get('PingStatus') != 'Online':\n      print(f'Agent went offline after {(i+1)*5}s')\n      break\n  else:\n    print('Agent never went offline - reboot may have already completed')\n  print('Waiting for SSM agent to come back online...')\n  for i in range(60):\n    time.sleep(5)\n    info = ssm.describe_instance_information(Filters=[{'Key': 'InstanceIds', 'Values': [instance_id]}])['InstanceInformationList']\n    if info and info[0].get('PingStatus') == 'Online':\n      print(f'Agent back online after {(i+1)*5}s')\n      return {'Status': 'Online'}\n  raise Exception('SSM agent did not come back online after pinned update reboot')\n",
+        "InputPayload": {
+          "InstanceId": "{{ InstanceId }}",
+          "Region": "{{ ExtractRegion.Region }}"
+        }
+      }
+    },
+    {
+      "name": "VerifyPatchLevel",
+      "action": "aws:runCommand",
+      "onFailure": "Continue",
+      "maxAttempts": 5,
+      "timeoutSeconds": 1200,
+      "inputs": {
+        "DocumentName": "AWS-RunPowerShellScript",
+        "InstanceIds": [
+          "{{ InstanceId }}"
+        ],
+        "Parameters": {
+          "commands": [
+            "$ErrorActionPreference = 'Stop'",
+            "$osUrl = '{{ PinnedCumulativeUpdateUrl }}'",
+            "$rebootKey = 'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Component Based Servicing\\RebootPending'",
+            "if ($osUrl) {",
+            "  $osKb = if ($osUrl -match 'kb(\\d+)') { 'KB' + $matches[1] } else { '' }",
+            "  $deadline = (Get-Date).AddMinutes(15)",
+            "  while ($true) {",
+            "    if (Get-HotFix -Id $osKb -ErrorAction SilentlyContinue) { Write-Output ('OK: OS CU ' + $osKb + ' installed'); break }",
+            "    $pending = Test-Path $rebootKey",
+            "    $servicing = [bool](Get-Process -Name TiWorker,TrustedInstaller -ErrorAction SilentlyContinue)",
+            "    if (-not $pending -and -not $servicing) { throw ('Pinned OS CU ' + $osKb + ' did not apply: not installed and servicing has settled (RebootPending=False, TiWorker idle).') }",
+            "    if ((Get-Date) -gt $deadline) { throw ('Timed out waiting for ' + $osKb + ' to finalize (RebootPending=' + $pending + ', servicing=' + $servicing + ').') }",
+            "    Write-Output ('  finalizing ' + $osKb + '... RebootPending=' + $pending + ' servicing=' + $servicing)",
+            "    Start-Sleep -Seconds 15",
+            "  }",
+            "}",
+            "$netUrl = '{{ PinnedDotNetUpdateUrl }}'",
+            "if ($netUrl) {",
+            "  $netKb = if ($netUrl -match 'kb(\\d+)') { 'KB' + $matches[1] } else { '' }",
+            "  if (Get-HotFix -Id $netKb -ErrorAction SilentlyContinue) { Write-Output ('OK: .NET ' + $netKb + ' installed') } else { Write-Output ('WARNING: .NET ' + $netKb + ' not in hotfix list (may be not-applicable on this .NET version)') }",
+            "}"
+          ]
+        }
+      }
+    },
+    {
+      "name": "RemoveRecoveryPartition",
+      "action": "aws:runCommand",
+      "onFailure": "Continue",
+      "inputs": {
+        "DocumentName": "AWS-RunPowerShellScript",
+        "InstanceIds": [
+          "{{ InstanceId }}"
+        ],
+        "Parameters": {
+          "commands": [
+            "reagentc /disable 2>&1 | Out-Null",
+            "$recovery = Get-Partition -DiskNumber 0 | Where-Object { $_.Type -eq 'Unknown' -or $_.Type -eq 'Recovery' }",
+            "if ($recovery) {",
+            "  $recovery | Remove-Partition -Confirm:$false",
+            "  Resize-Partition -DriveLetter C -Size (Get-PartitionSupportedSize -DriveLetter C).SizeMax",
+            "  Write-Output \"Recovery partition removed and C: extended\"",
+            "} else {",
+            "  Write-Output \"No recovery partition found\"",
+            "}"
+          ]
+        }
+      }
+    },
+    {
+      "name": "RemoveTempProfile",
+      "action": "aws:executeScript",
+      "onFailure": "Abort",
+      "inputs": {
+        "Runtime": "python3.11",
+        "Handler": "script_handler",
+        "Script": "import boto3\ndef script_handler(events, context):\n  if events['TempProfileAttached'] != 'true': return {'Message': 'No profile change'}\n  ec2 = boto3.client('ec2', region_name=events['Region'])\n  for a in ec2.describe_iam_instance_profile_associations(Filters=[{'Name': 'instance-id', 'Values': [events['InstanceId']]}])['IamInstanceProfileAssociations']:\n    if a['State'] == 'associated': ec2.disassociate_iam_instance_profile(AssociationId=a['AssociationId'])\n  return {'Message': 'Removed temporary upgrade profile'}\n",
+        "InputPayload": {
+          "InstanceId": "{{ InstanceId }}",
+          "Region": "{{ ExtractRegion.Region }}",
+          "TempProfileAttached": "{{ EnsureSsmAccess.TempProfileAttached }}"
+        }
+      }
+    },
+    {
+      "name": "SendSuccessNotification",
+      "action": "aws:executeScript",
+      "onFailure": "Continue",
+      "isEnd": true,
+      "inputs": {
+        "Runtime": "python3.11",
+        "Handler": "script_handler",
+        "Script": "import boto3\ndef script_handler(events, context):\n  if not events['TopicArn']: return {'Message': 'No topic'}\n  sns = boto3.client('sns', region_name=events['Region'])\n  sns.publish(TopicArn=events['TopicArn'], Subject=f\"Windows Upgrade SUCCESS: {events['InstanceId']}\", Message=f\"Upgrade completed. AMI: {events['BackupAmiId']}\")\n  return {'Message': 'Notification sent'}\n",
+        "InputPayload": {
+          "TopicArn": "{{ NotificationTopicArn }}",
+          "InstanceId": "{{ InstanceId }}",
+          "Region": "{{ ExtractRegion.Region }}",
+          "BackupAmiId": "{{ CreateBackupImage.BackupImageId }}"
+        }
+      }
+    },
+    {
+      "name": "BranchOnAutoRollback",
+      "action": "aws:branch",
+      "inputs": {
+        "Choices": [
+          {
+            "NextStep": "RollbackCleanupUpgradeVolume",
+            "Variable": "{{ AutoRollback }}",
+            "StringEquals": "true"
+          }
+        ],
+        "Default": "FailCleanupUpgradeVolume"
+      }
+    },
+    {
+      "name": "FailCleanupUpgradeVolume",
+      "action": "aws:executeScript",
+      "onFailure": "Continue",
+      "inputs": {
+        "Runtime": "python3.11",
+        "Handler": "script_handler",
+        "Script": "import boto3\nimport time\ndef script_handler(events, context):\n  ec2 = boto3.client('ec2', region_name=events['Region'])\n  try:\n    ec2.detach_volume(VolumeId=events['VolumeId'], Force=True)\n    for _ in range(24):\n      if ec2.describe_volumes(VolumeIds=[events['VolumeId']])['Volumes'][0]['State'] == 'available': break\n      time.sleep(5)\n  except: pass\n  try: ec2.delete_volume(VolumeId=events['VolumeId'])\n  except: pass\n  return {'Message': 'Cleaned up'}\n",
+        "InputPayload": {
+          "VolumeId": "{{ CreateUpgradeVolume.VolumeId }}",
+          "Region": "{{ ExtractRegion.Region }}"
+        }
+      }
+    },
+    {
+      "name": "FailRemoveTempProfile",
+      "action": "aws:executeScript",
+      "onFailure": "Abort",
+      "inputs": {
+        "Runtime": "python3.11",
+        "Handler": "script_handler",
+        "Script": "import boto3\ndef script_handler(events, context):\n  if events['TempProfileAttached'] != 'true': return {'Message': 'No profile change'}\n  ec2 = boto3.client('ec2', region_name=events['Region'])\n  for a in ec2.describe_iam_instance_profile_associations(Filters=[{'Name': 'instance-id', 'Values': [events['InstanceId']]}])['IamInstanceProfileAssociations']:\n    if a['State'] == 'associated': ec2.disassociate_iam_instance_profile(AssociationId=a['AssociationId'])\n  return {'Message': 'Removed temporary upgrade profile'}\n",
+        "InputPayload": {
+          "InstanceId": "{{ InstanceId }}",
+          "Region": "{{ ExtractRegion.Region }}",
+          "TempProfileAttached": "{{ EnsureSsmAccess.TempProfileAttached }}"
+        }
+      }
+    },
+    {
+      "name": "FailWithoutRollback",
+      "action": "aws:executeScript",
+      "isEnd": true,
+      "inputs": {
+        "Runtime": "python3.11",
+        "Handler": "script_handler",
+        "Script": "def script_handler(events, context):\n  raise Exception(f\"Upgrade failed. Backup AMI: {events['BackupAmiId']}. AutoRollback disabled.\")\n",
+        "InputPayload": {
+          "BackupAmiId": "{{ CreateBackupImage.BackupImageId }}"
+        }
+      }
+    },
+    {
+      "name": "RollbackCleanupUpgradeVolume",
+      "action": "aws:executeScript",
+      "onFailure": "Continue",
+      "inputs": {
+        "Runtime": "python3.11",
+        "Handler": "script_handler",
+        "Script": "import boto3\nimport time\ndef script_handler(events, context):\n  if not events['VolumeId']: return {'Message': 'No volume'}\n  ec2 = boto3.client('ec2', region_name=events['Region'])\n  try:\n    vol = ec2.describe_volumes(VolumeIds=[events['VolumeId']])['Volumes'][0]\n    if vol['Attachments']:\n      ec2.detach_volume(VolumeId=events['VolumeId'], Force=True)\n      for _ in range(24):\n        if ec2.describe_volumes(VolumeIds=[events['VolumeId']])['Volumes'][0]['State'] == 'available': break\n        time.sleep(5)\n    ec2.delete_volume(VolumeId=events['VolumeId'])\n  except: pass\n  return {'Message': 'Cleaned up'}\n",
+        "InputPayload": {
+          "VolumeId": "{{ CreateUpgradeVolume.VolumeId }}",
+          "Region": "{{ ExtractRegion.Region }}"
+        }
+      }
+    },
+    {
+      "name": "RollbackGetBackupSnapshot",
+      "action": "aws:executeAwsApi",
+      "inputs": {
+        "Service": "ec2",
+        "Api": "DescribeImages",
+        "ImageIds": ["{{ CreateBackupImage.BackupImageId }}"]
+      },
+      "outputs": [
+        {
+          "Name": "SnapshotId",
+          "Selector": "$.Images[0].BlockDeviceMappings[0].Ebs.SnapshotId",
+          "Type": "String"
+        }
+      ]
+    },
+    {
+      "name": "RollbackWaitForSnapshot",
+      "action": "aws:waitForAwsResourceProperty",
+      "timeoutSeconds": 600,
+      "inputs": {
+        "Service": "ec2",
+        "Api": "DescribeSnapshots",
+        "SnapshotIds": ["{{ RollbackGetBackupSnapshot.SnapshotId }}"],
+        "PropertySelector": "$.Snapshots[0].State",
+        "DesiredValues": ["completed"]
+      }
+    },
+    {
+      "name": "RollbackReplaceRootVolume",
+      "action": "aws:executeAwsApi",
+      "inputs": {
+        "Service": "ec2",
+        "Api": "CreateReplaceRootVolumeTask",
+        "InstanceId": "{{ InstanceId }}",
+        "SnapshotId": "{{ RollbackGetBackupSnapshot.SnapshotId }}",
+        "DeleteReplacedRootVolume": true
+      },
+      "outputs": [
+        {
+          "Name": "TaskId",
+          "Selector": "$.ReplaceRootVolumeTask.ReplaceRootVolumeTaskId",
+          "Type": "String"
+        }
+      ]
+    },
+    {
+      "name": "RollbackWaitForRootVolumeReplace",
+      "action": "aws:waitForAwsResourceProperty",
+      "timeoutSeconds": 1200,
+      "inputs": {
+        "Service": "ec2",
+        "Api": "DescribeReplaceRootVolumeTasks",
+        "ReplaceRootVolumeTaskIds": ["{{ RollbackReplaceRootVolume.TaskId }}"],
+        "PropertySelector": "$.ReplaceRootVolumeTasks[0].TaskState",
+        "DesiredValues": ["succeeded"]
+      }
+    },
+    {
+      "name": "RollbackRemoveTempProfile",
+      "action": "aws:executeScript",
+      "onFailure": "Abort",
+      "inputs": {
+        "Runtime": "python3.11",
+        "Handler": "script_handler",
+        "Script": "import boto3\ndef script_handler(events, context):\n  if events['TempProfileAttached'] != 'true': return {'Message': 'No profile change'}\n  ec2 = boto3.client('ec2', region_name=events['Region'])\n  for a in ec2.describe_iam_instance_profile_associations(Filters=[{'Name': 'instance-id', 'Values': [events['InstanceId']]}])['IamInstanceProfileAssociations']:\n    if a['State'] == 'associated': ec2.disassociate_iam_instance_profile(AssociationId=a['AssociationId'])\n  return {'Message': 'Removed temporary upgrade profile'}\n",
+        "InputPayload": {
+          "InstanceId": "{{ InstanceId }}",
+          "Region": "{{ ExtractRegion.Region }}",
+          "TempProfileAttached": "{{ EnsureSsmAccess.TempProfileAttached }}"
+        }
+      }
+    },
+    {
+      "name": "RollbackSendNotification",
+      "action": "aws:executeScript",
+      "isEnd": true,
+      "onFailure": "Continue",
+      "inputs": {
+        "Runtime": "python3.11",
+        "Handler": "script_handler",
+        "Script": "import boto3\ndef script_handler(events, context):\n  print('=== ROLLBACK COMPLETE ===')\n  if not events['TopicArn']: return {'Message': 'No topic'}\n  sns = boto3.client('sns', region_name=events['Region'])\n  sns.publish(TopicArn=events['TopicArn'], Subject=f\"Windows Upgrade ROLLED BACK: {events['InstanceId']}\", Message=f\"Upgrade failed and was rolled back. AMI: {events['BackupAmiId']}\")\n  return {'Message': 'Notification sent'}\n",
+        "InputPayload": {
+          "TopicArn": "{{ NotificationTopicArn }}",
+          "InstanceId": "{{ InstanceId }}",
+          "Region": "{{ ExtractRegion.Region }}",
+          "BackupAmiId": "{{ CreateBackupImage.BackupImageId }}"
+        }
+      }
+    },
+    {
+      "name": "CleanupTempProfileOnFailure",
+      "action": "aws:executeScript",
+      "onFailure": "Abort",
+      "inputs": {
+        "Runtime": "python3.11",
+        "Handler": "script_handler",
+        "Script": "import boto3\ndef script_handler(events, context):\n  if events['TempProfileAttached'] == 'true':\n    ec2 = boto3.client('ec2', region_name=events['Region'])\n    for a in ec2.describe_iam_instance_profile_associations(Filters=[{'Name': 'instance-id', 'Values': [events['InstanceId']]}])['IamInstanceProfileAssociations']:\n      if a['State'] == 'associated': ec2.disassociate_iam_instance_profile(AssociationId=a['AssociationId'])\n    print('Removed temporary upgrade profile')\n  raise Exception('Upgrade failed before completion; the temporary upgrade profile was removed (if the automation had attached one). See the failed step above for the root cause.')\n",
+        "InputPayload": {
+          "InstanceId": "{{ InstanceId }}",
+          "Region": "{{ ExtractRegion.Region }}",
+          "TempProfileAttached": "{{ EnsureSsmAccess.TempProfileAttached }}"
+        }
+      }
+    }
+  ],
+  "outputs": [
+    "CreateBackupImage.BackupImageId",
+    "CalculateRetentionDate.RetentionDate",
+    "EnsureSsmAccess.TempProfileAttached"
+  ]
+}
