@@ -68,6 +68,17 @@
       "outputs": [{"Name": "Message", "Selector": "$.Payload.Message", "Type": "String"}]
     },
     {
+      "name": "CheckWindowsBYOL",
+      "action": "aws:executeScript",
+      "inputs": {
+        "Runtime": "python3.11",
+        "Handler": "script_handler",
+        "Script": "import boto3\n\ndef script_handler(events, context):\n  ec2 = boto3.client('ec2', region_name=events['Region'])\n  inst = ec2.describe_instances(InstanceIds=[events['InstanceId']])['Reservations'][0]['Instances'][0]\n  platform = inst.get('PlatformDetails', '')\n  usage = inst.get('UsageOperation', '')\n  if 'BYOL' in platform or usage == 'RunInstances:0800':\n    raise Exception('INCOMPATIBLE: Windows BYOL instance detected (PlatformDetails=' + platform + ', UsageOperation=' + usage + '). This automation supports license-included Windows only.')\n  return {'Message': 'OK: License-included Windows (' + platform + ')'}\n",
+        "InputPayload": {"InstanceId": "{{ InstanceId }}", "Region": "{{ ExtractRegion.Region }}"}
+      },
+      "outputs": [{"Name": "Message", "Selector": "$.Payload.Message", "Type": "String"}]
+    },
+    {
       "name": "CheckInstanceRole",
       "action": "aws:executeScript",
       "inputs": {
