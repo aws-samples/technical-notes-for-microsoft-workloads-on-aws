@@ -21,14 +21,18 @@ This automation uses SSM to orchestrate an in-place upgrade from Windows Server 
 The automation handles:
 - Pre-flight checks (OS version, SSM agent, disk space, partition layout)
 - AMI backup with configurable retention
+- Automatic disk expansion when the root volume needs more space — extends the partition into unallocated space, or grows the EBS volume and then the partition, as needed
 - Driver updates (ENA, PV, NVMe)
 - Windows in-place upgrade using AWS-provided installation media
+- Multi-language aware — auto-detects the OS language and selects the matching 2019 installation media (17 languages)
 - Deterministic OS + .NET cumulative updates so the box isn't left at the 2019 media baseline (optional)
+- Optional automatic rollback — on upgrade failure or boot loop, restores the pre-upgrade root volume from the backup (via EC2 Replace Root Volume)
 - Automatic cleanup
 
 ## Prerequisites
 
 - Windows Server 2016 EC2 instance
+- License-included Windows (BYOL / Bring Your Own License instances are not supported)
 - SSM Agent installed and running
 - Xen PV or ENA networking (SR-IOV/Intel 82599 not supported). If using a 4th-generation instance (m4, c4, etc.) with the Intel 82599 ENI, [migrate to a current-generation instance type](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/migrating-latest-types.html) (m5, c5, or newer) before running this automation.
 - SSM connectivity — internet or SSM VPC endpoints — so the automation can manage the instance
@@ -171,7 +175,7 @@ Runs the PreCheck document and reports results. Never modifies the instance. If 
 4. **DeprecateBackupImage** — Set AMI deprecation date based on BackupRetentionDays
 5. **WaitForInstanceAfterReboot** — Poll SSM agent: wait for offline (reboot started) then online (reboot complete)
 6. **UpdateSSMAgent** — Update SSM Agent to latest version
-7. **CheckDiskSpaceAndExpand** — If `<20GB` free, expand EBS volume and extend C: to max
+7. **CheckDiskSpaceAndExpand** — If <20GB free, expand EBS volume and extend C: to max
 8. **FindWindows2019Snapshot** — Detect OS language, find matching AWS installation media snapshot
 9. **CreateUpgradeVolume** — Create GP3 volume from snapshot (initializes during driver installs)
 10. **Install drivers** — Update ENA, PV, NVMe drivers
@@ -259,6 +263,10 @@ If the automation fails for any reason and you need to proceed, AWS documents th
 ### PreUpgradeCheck fails with EC2Config error
 
 EC2Config is not supported on Windows 2019. Migrate to EC2Launch first: [EC2Launch docs](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2launch.html)
+
+### CheckWindowsBYOL fails
+
+This automation supports license-included Windows only. BYOL (Bring Your Own License) instances use customer-provided media and licensing, which is incompatible with the AWS-provided installation media used by this automation. If you need to upgrade a BYOL instance, use the [manual in-place upgrade procedure](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/os-inplaceupgrade.html) with your own installation media, or use [AWS License Manager](https://docs.aws.amazon.com/license-manager/latest/userguide/license-type-conversion.html) to convert from BYOL to license-included before running this automation.
 
 ### CheckXenSriovCompatibility fails
 
