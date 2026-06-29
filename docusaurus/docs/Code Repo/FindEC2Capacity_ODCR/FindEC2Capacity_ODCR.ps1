@@ -40,11 +40,12 @@
     CRs before creating new ones. Requires -Region or -Zone.
 
 .PARAMETER TargetTimeout
-    Maximum seconds to spend accumulating capacity in -TargetQuantity mode (default: 30).
-    Retries all AZs at the interval specified by -TargetQuantityInterval.
+    Maximum minutes to spend accumulating capacity in -TargetQuantity mode (default: 0).
+    Default (0) does a single run: one sweep of all AZs with no waiting/retry.
+    Set to e.g. 5 to keep retrying for 5 minutes, re-sweeping at -TargetQuantityInterval.
 
 .PARAMETER TargetQuantityInterval
-    Seconds between retry attempts in -TargetQuantity mode (default: 10).
+    Minutes between retry attempts in -TargetQuantity mode (default: 1).
 
 .PARAMETER InstanceMatchCriteria
     open (default): any matching instance in the AZ automatically uses the reservation.
@@ -56,7 +57,8 @@
     Requires -TargetQuantity and -Region (to identify the CR's region).
 
 .PARAMETER RegionGroup
-    Which region group to try: us, us+, eu, ap, or all (default).
+    Which region group to try: us, us+, eu, ap, or all. Must be passed explicitly
+    (there is no implicit default) so the script never fires at every region by accident.
     us  = US regions only
     us+ = US + CA + SA + MX (Americas)
     eu  = EU regions only
@@ -83,7 +85,7 @@
             pwsh
         3. Run the script (use Tab to auto-complete parameters and values):
             .\FindEC2Capacity_ODCR.ps1 -OS Windows -InstanceType g7e.2xlarge -RegionGroup us
-            .\FindEC2Capacity_ODCR.ps1 -OS Windows -InstanceType g6e.2xlarge -Region us-east-2 -TargetQuantity 10 -TargetTimeout 600
+            .\FindEC2Capacity_ODCR.ps1 -OS Windows -InstanceType g7e.2xlarge -Region us-east-2 -TargetQuantity 10 -TargetTimeout 10
 
 .EXAMPLE
     .\FindEC2Capacity_ODCR.ps1 -OS Windows -InstanceType g7e.2xlarge -RegionGroup us
@@ -98,12 +100,36 @@
     Creates Linux ODCRs for 4x i4i.metal in us-east-1 or us-east-2, prompts which to keep or cancel
 
 .EXAMPLE
-    .\FindEC2Capacity_ODCR.ps1 -OS Windows -InstanceType g6e.4xlarge -RegionGroup all -Sequential
-    Tries AZs one at a time, stops on first success
+    .\FindEC2Capacity_ODCR.ps1 -OS Windows -InstanceType g7e.4xlarge -RegionGroup eu -Sequential
+    Tries AZs one at a time across EU regions, stops on first success
 
 .EXAMPLE
-    .\FindEC2Capacity_ODCR.ps1 -OS Windows -InstanceType g6e.2xlarge -Region us-east-2 -TargetQuantity 10 -TargetTimeout 600
-    Accumulates 10 slots by creating and expanding ODCRs across AZs in us-east-2 (10 min timeout)
+    .\FindEC2Capacity_ODCR.ps1 -OS Linux -InstanceType g7e.2xlarge -Region us-east-2 -InstanceMatchCriteria targeted
+    Reserves capacity that only instances explicitly targeting the CR id will use (not any matching instance)
+
+.EXAMPLE
+    .\FindEC2Capacity_ODCR.ps1 -OS Windows -InstanceType g7e.2xlarge -Region us-east-2 -TargetQuantity 10 -TargetTimeout 10
+    Accumulates 10 slots by creating and expanding ODCRs across AZs in us-east-2 (retries for 10 min)
+
+.EXAMPLE
+    .\FindEC2Capacity_ODCR.ps1 -OS Windows -InstanceType g7e.2xlarge -Zone us-east-1a,us-east-2a
+    Targets specific AZs by name (parallel), prompts which to keep or cancel
+
+.EXAMPLE
+    .\FindEC2Capacity_ODCR.ps1 -OS Linux -InstanceType p5.4xlarge -Zone use1-az1,use2-az1
+    Targets specific AZs by zone ID (parallel), prompts which to keep or cancel
+
+.EXAMPLE
+    .\FindEC2Capacity_ODCR.ps1 -OS Windows -InstanceType p5.4xlarge -Zone us-east-1a,us-east-2b -TargetQuantity 4 -TargetTimeout 5 -TargetQuantityInterval 2
+    Accumulates 4 slots across the given AZs, retrying every 2 min for up to 5 min
+
+.EXAMPLE
+    .\FindEC2Capacity_ODCR.ps1 -OS Windows -InstanceType g7e.4xlarge -Region us-east-2 -CapacityReservationId cr-0abc123 -TargetQuantity 8
+    Expands a specific existing reservation directly to 8 slots
+
+.EXAMPLE
+    .\FindEC2Capacity_ODCR.ps1 -OS Linux -InstanceType g6e.12xlarge -Zone us-east-1a -TargetQuantity 6 -TargetTimeout 30
+    Reserves 6 instances in a single AZ. 
 #>
 
 Param (
@@ -114,8 +140,8 @@ Param (
     [string]$OS,
     [int]$Quantity = 1,
     [int]$TargetQuantity,
-    [int]$TargetTimeout = 30,
-    [int]$TargetQuantityInterval = 10,
+    [int]$TargetTimeout = 0,
+    [int]$TargetQuantityInterval = 1,
     [switch]$Sequential,
     [string[]]$Region,
     [string[]]$Zone,
@@ -127,6 +153,19 @@ Param (
 )
 
 # Validate param combinations
+# Require an explicit scope. This script CREATES real reservations (billed immediately),
+# so it never silently defaults to firing at every region. The user must choose -Region,
+# -Zone, or pass -RegionGroup explicitly (e.g. -RegionGroup all) to opt into a broad sweep.
+if (-not $Region -and -not $Zone -and -not $PSBoundParameters.ContainsKey('RegionGroup')) {
+    Write-Host "Specify a scope: -Region, -Zone, or -RegionGroup." -ForegroundColor Red
+    Write-Host "  This script creates real ODCRs that bill immediately, so it won't default to all regions." -ForegroundColor DarkYellow
+    Write-Host "  Examples:" -ForegroundColor DarkYellow
+    Write-Host "    -Region us-east-2     one or more specific regions" -ForegroundColor DarkYellow
+    Write-Host "    -Zone use2-az1        specific AZs" -ForegroundColor DarkYellow
+    Write-Host "    -RegionGroup us       a region group: us, us+, eu, ap" -ForegroundColor DarkYellow
+    Write-Host "    -RegionGroup all      every enabled region (widest blast radius)" -ForegroundColor DarkYellow
+    exit 1
+}
 if ($TargetQuantity -and -not $Region -and -not $Zone) {
     Write-Host "-TargetQuantity requires -Region or -Zone. Specify target regions/zones explicitly." -ForegroundColor Red
     exit 1
@@ -138,6 +177,27 @@ if ($Zone -and $Region) {
 if ($Zone -and $RegionGroup -ne "all") {
     Write-Host "-Zone overrides -RegionGroup. Remove -RegionGroup when using -Zone." -ForegroundColor Red
     exit 1
+}
+if ($CapacityReservationId -and -not $TargetQuantity) {
+    Write-Host "-CapacityReservationId requires -TargetQuantity (the size to expand the CR to)." -ForegroundColor Red
+    exit 1
+}
+
+# -TargetTimeout and -TargetQuantityInterval are specified in minutes; convert to seconds for the stopwatch/sleep logic.
+$TargetTimeoutSec = $TargetTimeout * 60
+$TargetQuantityIntervalSec = $TargetQuantityInterval * 60
+# Label for the timeout shown in output (0 = a single run with no retry)
+$timeoutLabel = if ($TargetTimeout -le 0) { "single run, no retry" } else { "timeout: ${TargetTimeout}m" }
+
+# Format a duration in seconds as a friendly string (e.g. "4m 30s", "45s")
+function Format-Duration([double]$seconds) {
+    $s = [int][Math]::Round($seconds)
+    if ($s -ge 60) {
+        $m = [Math]::Floor($s / 60)
+        $rem = $s % 60
+        if ($rem -gt 0) { return "${m}m ${rem}s" } else { return "${m}m" }
+    }
+    return "${s}s"
 }
 
 Import-Module AWS.Tools.EC2
@@ -327,24 +387,29 @@ $azData = @($supportedRegionList | ForEach-Object -Parallel {
     foreach ($az in $allAZs) {
         if ($az.ZoneName -in $supportedAZNames) {
             $city = $region
+            $locationName = $null
             $gln = $az.GroupLongName
-            if ($gln -and $gln -match '\((.+?)\)') { $city = $Matches[1] }
+            if ($gln) {
+                if ($gln -match '\((.+?)\)') { $city = $Matches[1] }
+                # Pricing API "location" is the region long name without any trailing digits
+                $locationName = if ($gln -match '^(.+?)\s*\d*$') { $Matches[1].Trim() } else { $gln }
+            }
             $country = if ($az.Geography -and $az.Geography.Name) { "$($az.Geography.Name)" } else { "" }
             [PSCustomObject]@{
-                Region   = $region
-                AZ       = $az.ZoneName
-                ZoneId   = $az.ZoneId
-                Country  = $country
-                City     = $city
-                AZLabel  = if ($az.ZoneId) { "$($az.ZoneName) / $($az.ZoneId)" } else { $az.ZoneName }
+                Region       = $region
+                AZ           = $az.ZoneName
+                ZoneId       = $az.ZoneId
+                Country      = $country
+                City         = $city
+                LocationName = $locationName
+                AZLabel      = if ($az.ZoneId) { "$($az.ZoneName) / $($az.ZoneId)" } else { $az.ZoneName }
             }
         }
     }
 } -ThrottleLimit 20)
 
 # Display region support (in priority order)
-$displayRegions = $tryRegions
-foreach ($region in $displayRegions) {
+foreach ($region in $tryRegions) {
     $entry = $azData | Where-Object { $_.Region -eq $region } | Select-Object -First 1
     if ($entry) {
         $label = if ($entry.Country) { "$($entry.Country) - $($entry.City) - $region" } else { "$($entry.City) - $region" }
@@ -388,32 +453,41 @@ if ($TargetQuantity) {
             exit 1
         }
         $targetRegion = $Region[0]
-        Write-Host "`nExpanding $CapacityReservationId to $TargetQuantity slot(s) in increments of $Quantity (timeout: ${TargetTimeout}s)..." -ForegroundColor White
+        Write-Host "`nExpanding $CapacityReservationId to $TargetQuantity slot(s) in increments of $Quantity ($timeoutLabel)..." -ForegroundColor White
         $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
         
         # Get current CR state
-        $cr = Get-EC2CapacityReservation -CapacityReservationId $CapacityReservationId -Region "$targetRegion" -ErrorAction SilentlyContinue
+        try {
+            $cr = Get-EC2CapacityReservation -CapacityReservationId $CapacityReservationId -Region "$targetRegion" -ErrorAction Stop
+        } catch {
+            $cr = $null
+        }
         if (-not $cr) {
-            Write-Host "Capacity Reservation $CapacityReservationId not found in $targetRegion." -ForegroundColor Red
+            Write-Host "Capacity Reservation '$CapacityReservationId' not found in $targetRegion. Check the CR ID and -Region." -ForegroundColor Red
             exit 1
         }
         $currentQty = $cr.TotalInstanceCount
         Write-Host "  Current: $CapacityReservationId qty=$currentQty in $($cr.AvailabilityZone)" -ForegroundColor DarkGray
         
-        while ($currentQty -lt $TargetQuantity -and $stopwatch.Elapsed.TotalSeconds -lt $TargetTimeout) {
+        # -TargetTimeout 0 = a single run (expand as far as capacity allows now, no waiting/retry).
+        $firstPass = $true
+        while (($firstPass -or $stopwatch.Elapsed.TotalSeconds -lt $TargetTimeoutSec) -and $currentQty -lt $TargetQuantity) {
+            $firstPass = $false
             $increment = [Math]::Min($Quantity, $TargetQuantity - $currentQty)
             $newQty = $currentQty + $increment
-            Write-Host "  Expanding to $newQty... " -ForegroundColor Cyan -NoNewline
+            Write-Host "  Expanding to $newQty " -ForegroundColor Cyan -NoNewline
             try {
                 Edit-EC2CapacityReservation -CapacityReservationId $CapacityReservationId -InstanceCount $newQty -Region "$targetRegion" -ErrorAction Stop | Out-Null
                 $currentQty = $newQty
+                # Keep expanding within this run while we're still succeeding, even if the timeout is 0.
+                $firstPass = $true
                 Write-Host "SUCCESS (qty=$currentQty/$TargetQuantity)" -ForegroundColor Green
             } catch {
-                Write-Host "FAILED: $($_.Exception.Message)" -ForegroundColor Yellow
-                $remaining = [Math]::Round($TargetTimeout - $stopwatch.Elapsed.TotalSeconds)
+                Write-Host "    FAILED: $($_.Exception.Message)" -ForegroundColor Yellow
+                $remaining = [Math]::Round($TargetTimeoutSec - $stopwatch.Elapsed.TotalSeconds)
                 if ($remaining -gt 0 -and $currentQty -lt $TargetQuantity) {
-                    Write-Host "  Retrying in ${TargetQuantityInterval}s... (${remaining}s remaining)" -ForegroundColor DarkGray
-                    Start-Sleep -Seconds ([Math]::Min($TargetQuantityInterval, $remaining))
+                    Write-Host "  [$(Get-Date -Format 'HH:mm:ss')] Retrying in $(Format-Duration $TargetQuantityIntervalSec)... ($(Format-Duration $remaining) remaining)" -ForegroundColor DarkGray
+                    Start-Sleep -Seconds ([Math]::Min($TargetQuantityIntervalSec, $remaining))
                 } else { break }
             }
         }
@@ -426,7 +500,7 @@ if ($TargetQuantity) {
         exit 0
     }
 
-    Write-Host "`nFinding $TargetQuantity slot(s) in increments of $Quantity (timeout: ${TargetTimeout}s)..." -ForegroundColor White
+    Write-Host "`nFinding $TargetQuantity slot(s) in increments of $Quantity ($timeoutLabel)..." -ForegroundColor White
     $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
     $totalReserved = 0
     $createdODCRs = @()
@@ -457,12 +531,23 @@ if ($TargetQuantity) {
 
     # Count existing capacity toward target
     $totalReserved = ($createdODCRs | Measure-Object -Property Qty -Sum).Sum
+
+    # Flag AZs that already hold more than one matching ODCR. AWS can't merge them,
+    # so they'll remain as separate reservations; we only grow the largest.
+    $dupAZs = $createdODCRs | Group-Object AZ | Where-Object { $_.Count -gt 1 }
+    foreach ($d in $dupAZs) {
+        Write-Host "  Note: $($d.Count) ODCRs already exist in $($d.Group[0].AZLabel); AWS can't merge them, expanding the largest." -ForegroundColor DarkYellow
+    }
+
     if ($totalReserved -ge $TargetQuantity) {
         Write-Host "`nTarget already met: $totalReserved/$TargetQuantity slots exist." -ForegroundColor Green
         $stopwatch.Stop()
     }
 
-    while ($totalReserved -lt $TargetQuantity -and $stopwatch.Elapsed.TotalSeconds -lt $TargetTimeout) {
+    # -TargetTimeout 0 = a single sweep of all AZs with no waiting/retry.
+    $firstPass = $true
+    while (($firstPass -or $stopwatch.Elapsed.TotalSeconds -lt $TargetTimeoutSec) -and $totalReserved -lt $TargetQuantity) {
+        $firstPass = $false
         $madeProgress = $false
         $lastRegion = ""
         $passFailedAZs = @{}
@@ -478,13 +563,15 @@ if ($TargetQuantity) {
                 $lastRegion = "$($t.Region)"
             }
 
-            # Check if we already have an ODCR in this AZ
-            $existing = $createdODCRs | Where-Object { $_.AZ -eq $t.AZ } | Select-Object -First 1
+            # If we know about more than one ODCR in this AZ (e.g. created in a prior
+            # run), expand the largest. AWS can't merge reservations, and insufficient
+            # capacity is a per-AZ ceiling, so growing one CR is equivalent to any other.
+            $existing = $createdODCRs | Where-Object { $_.AZ -eq $t.AZ } | Sort-Object Qty -Descending | Select-Object -First 1
 
             if (-not $existing) {
                 # Create new ODCR in this AZ
                 $needed = [Math]::Min($Quantity, $TargetQuantity - $totalReserved)
-                Write-Host "  Trying $($t.AZLabel)... " -ForegroundColor Cyan -NoNewline
+                Write-Host "  Trying $($t.AZLabel) " -ForegroundColor Cyan -NoNewline
                 try {
                     $reservation = Add-EC2CapacityReservation `
                         -Region "$($t.Region)" `
@@ -502,7 +589,7 @@ if ($TargetQuantity) {
                     Write-Host "$crId CREATED qty=$needed (total: $totalReserved/$TargetQuantity)" -ForegroundColor Green
                     $existing = $createdODCRs | Where-Object { $_.AZ -eq $t.AZ } | Select-Object -First 1
                 } catch {
-                    Write-Host "FAILED: $($_.Exception.Message)" -ForegroundColor Yellow
+                    Write-Host "    FAILED: $($_.Exception.Message)" -ForegroundColor Yellow
                     continue
                 }
             }
@@ -511,7 +598,7 @@ if ($TargetQuantity) {
             while ($totalReserved -lt $TargetQuantity -and $existing) {
                 $increment = [Math]::Min($Quantity, $TargetQuantity - $totalReserved)
                 $newQty = $existing.Qty + $increment
-                Write-Host "  Trying $($t.AZLabel)... " -ForegroundColor Cyan -NoNewline
+                Write-Host "  Trying $($t.AZLabel) " -ForegroundColor Cyan -NoNewline
                 try {
                     Edit-EC2CapacityReservation -CapacityReservationId $existing.CrId -InstanceCount $newQty -Region "$($t.Region)" -ErrorAction Stop | Out-Null
                     $totalReserved += $increment
@@ -527,11 +614,11 @@ if ($TargetQuantity) {
         }
 
         # If no progress on this pass and all AZs either exhausted or failed, wait and retry
-        if (-not $madeProgress -and $totalReserved -lt $TargetQuantity -and $stopwatch.Elapsed.TotalSeconds -lt $TargetTimeout) {
-            $remaining = [Math]::Round($TargetTimeout - $stopwatch.Elapsed.TotalSeconds)
+        if (-not $madeProgress -and $totalReserved -lt $TargetQuantity -and $stopwatch.Elapsed.TotalSeconds -lt $TargetTimeoutSec) {
+            $remaining = [Math]::Round($TargetTimeoutSec - $stopwatch.Elapsed.TotalSeconds)
             if ($remaining -gt 0) {
-                Write-Host "`n  Retrying in ${TargetQuantityInterval}s... (${remaining}s remaining)" -ForegroundColor DarkGray
-                Start-Sleep -Seconds ([Math]::Min($TargetQuantityInterval, $remaining))
+                Write-Host "`n  [$(Get-Date -Format 'HH:mm:ss')] Retrying in $(Format-Duration $TargetQuantityIntervalSec)... ($(Format-Duration $remaining) remaining)" -ForegroundColor DarkGray
+                Start-Sleep -Seconds ([Math]::Min($TargetQuantityIntervalSec, $remaining))
             }
         }
     }
@@ -565,7 +652,7 @@ if ($TargetQuantity) {
 }
 
 if (-not $Sequential) {
-    Write-Host "`nCreating capacity reservation (parallel - $($azTargets.Count) AZs)..." -ForegroundColor White
+    Write-Host "`nLooking for capacity / creating reservation (parallel - $($azTargets.Count) AZs)..." -ForegroundColor White
 
     $results = $azTargets | ForEach-Object -Parallel {
         $t = $_
@@ -579,12 +666,12 @@ if (-not $Sequential) {
                 -InstanceCount $using:Quantity `
                 -InstanceMatchCriteria $using:InstanceMatchCriteria
             [PSCustomObject]@{
-                Region = $t.Region; City = $t.City; AZ = $t.AZ
+                Region = $t.Region; AZ = $t.AZ
                 AZLabel = $t.AZLabel; CrId = $reservation.CapacityReservationId; Success = $true
             }
         } catch {
             [PSCustomObject]@{
-                Region = $t.Region; City = $t.City; AZ = $t.AZ
+                Region = $t.Region; AZ = $t.AZ
                 AZLabel = $t.AZLabel; CrId = $null; Success = $false; Error = $_.Exception.Message
             }
         }
@@ -599,27 +686,115 @@ if (-not $Sequential) {
     $lastRegion = ""
     foreach ($r in $sortedResults) {
         if ("$($r.Region)" -ne $lastRegion) {
-            $countryLabel = ($azData | Where-Object { $_.Region -eq "$($r.Region)" } | Select-Object -First 1).Country
-            $cityLabel = ($azData | Where-Object { $_.Region -eq "$($r.Region)" } | Select-Object -First 1).City
-            $regionHeader = if ($countryLabel) { "$countryLabel - $cityLabel - $($r.Region)" } else { "$cityLabel - $($r.Region)" }
+            $hdr = $azData | Where-Object { $_.Region -eq "$($r.Region)" } | Select-Object -First 1
+            $regionHeader = if ($hdr.Country) { "$($hdr.Country) - $($hdr.City) - $($r.Region)" } else { "$($hdr.City) - $($r.Region)" }
             Write-Host "`n$regionHeader" -ForegroundColor White
             $lastRegion = "$($r.Region)"
         }
-        Write-Host "  Trying $($r.AZLabel)... " -ForegroundColor Cyan -NoNewline
+        Write-Host "  Trying $($r.AZLabel) " -ForegroundColor Cyan -NoNewline
         if ($r.Success) {
             $successIndex++
-            # Get location name for pricing from GroupLongName
+            # Location name for pricing was precomputed during discovery (azData.LocationName)
             $azEntry = $azData | Where-Object { $_.AZ -eq $r.AZ } | Select-Object -First 1
-            $locName = if ($azEntry) {
-                # Reconstruct location name from AZ data for pricing API
-                $allAZsForRegion = Get-EC2AvailabilityZone -Region "$($r.Region)" -ZoneName "$($r.AZ)" -ErrorAction SilentlyContinue
-                if ($allAZsForRegion -and $allAZsForRegion.GroupLongName) {
-                    $gln = $allAZsForRegion.GroupLongName
-                    if ($gln -match '^(.+?)\s*\d*$') { $Matches[1].Trim() } else { $gln }
-                } else { $null }
-            } else { $null }
-            $price = Get-OnDemandPrice "$($r.Region)" $locName
+            $price = Get-OnDemandPrice "$($r.Region)" $azEntry.LocationName
             $priceStr = if ($price) { "`$$price/hr" } else { "" }
             $qtyStr = if ($Quantity -gt 1) { " x$Quantity" } else { "" }
-            Write-Host "SUCCESS [$successIndex] $priceStr$qtyStr" 
-... (truncated at 30,000 chars)
+            Write-Host "SUCCESS [$successIndex] $priceStr$qtyStr" -ForegroundColor Green
+        } else {
+            Write-Host "FAILED  [x] $($r.Error)" -ForegroundColor Yellow
+        }
+    }
+
+    if ($sortedSuccesses.Count -gt 0) {
+        # A single success is kept automatically; only prompt when there's more than one.
+        if ($sortedSuccesses.Count -gt 1) {
+            Write-Host "`nWhich to keep? (comma-separated, e.g. 1,3 or Enter to cancel all): " -ForegroundColor Yellow -NoNewline
+            $selection = Read-Host
+            $keepers = @()
+            $extras = @()
+            if ($selection.Trim() -eq "") {
+                $extras = $sortedSuccesses
+            } else {
+                $keepIndices = $selection -split ',' | ForEach-Object { [int]$_.Trim() - 1 }
+                for ($i = 0; $i -lt $sortedSuccesses.Count; $i++) {
+                    if ($i -in $keepIndices) { $keepers += $sortedSuccesses[$i] }
+                    else { $extras += $sortedSuccesses[$i] }
+                }
+            }
+            if ($extras.Count -gt 0) {
+                Write-Host "`nCancelling $($extras.Count) reservation(s)..." -ForegroundColor White
+                foreach ($e in $extras) {
+                    Remove-EC2CapacityReservation -CapacityReservationId "$($e.CrId)" -Region "$($e.Region)" -Force | Out-Null
+                    Write-Host "  Cancelled $($e.CrId) in $($e.AZLabel)" -ForegroundColor DarkGray
+                }
+            }
+            if ($keepers.Count -eq 0) {
+                Write-Host "`nAll reservations cancelled." -ForegroundColor Yellow
+            }
+        }
+        # Print launch/cancel instructions for kept reservations
+        $keptList = if ($sortedSuccesses.Count -eq 1) { @($sortedSuccesses[0]) } else { @($keepers) }
+        if ($keptList.Count -gt 0) {
+            $totalSlots = $keptList.Count * $Quantity
+            Write-Host "`nKept reservation(s): $($keptList.Count) x $Quantity = $totalSlots total slot(s)" -ForegroundColor Green
+            Write-Host "  $("Region".PadRight(14)) $("AZ".PadRight(24)) $("Qty".PadRight(5)) ODCR ID" -ForegroundColor White
+            Write-Host "  $("─" * 14) $("─" * 24) $("─" * 5) $("─" * 26)" -ForegroundColor DarkGray
+            foreach ($k in $keptList) {
+                Write-Host "  $("$($k.Region)".PadRight(14)) $("$($k.AZLabel)".PadRight(24)) $("$Quantity".PadRight(5)) $($k.CrId)" -ForegroundColor Cyan
+            }
+            $uniqueRegions = @($keptList | ForEach-Object { $_.Region } | Select-Object -Unique)
+            Write-Host "`nConsole:" -ForegroundColor White
+            foreach ($reg in $uniqueRegions) {
+                Write-Host "  ${reg}: https://console.aws.amazon.com/ec2/home?region=$reg#CapacityReservations:" -ForegroundColor Cyan
+            }
+            Write-Host "`nTo launch:" -ForegroundColor White
+            Write-Host "  New-EC2Instance -Region <region> -InstanceType $InstanceType -CapacityReservationTarget_CapacityReservationId <cr-id> ..." -ForegroundColor Yellow
+            Write-Host "`nTo cancel:" -ForegroundColor White
+            foreach ($k in $keptList) {
+                Write-Host "  Remove-EC2CapacityReservation -CapacityReservationId $($k.CrId) -Region $($k.Region) -Force" -ForegroundColor Yellow
+            }
+        }
+        $reserved = $true
+    }
+} else {
+    Write-Host "`nLooking for capacity / creating reservation..." -ForegroundColor White
+    $lastRegion = ""
+    foreach ($t in $azTargets) {
+        if ("$($t.Region)" -ne $lastRegion) {
+            $regionHeader = if ($t.Country) { "$($t.Country) - $($t.City) - $($t.Region)" } else { "$($t.City) - $($t.Region)" }
+            Write-Host "`n$regionHeader" -ForegroundColor White
+            $lastRegion = "$($t.Region)"
+        }
+        Write-Host "  Trying $($t.AZLabel) " -ForegroundColor Cyan -NoNewline
+        try {
+            $reservation = Add-EC2CapacityReservation `
+                -Region "$($t.Region)" `
+                -InstanceType $InstanceType `
+                -InstancePlatform $platform `
+                -AvailabilityZone "$($t.AZ)" `
+                -InstanceCount $Quantity `
+                -InstanceMatchCriteria $InstanceMatchCriteria
+            $crId = $reservation.CapacityReservationId
+            # Location name for pricing was precomputed during discovery (azData.LocationName)
+            $azEntry = $azData | Where-Object { $_.AZ -eq $t.AZ } | Select-Object -First 1
+            $price = Get-OnDemandPrice "$($t.Region)" $azEntry.LocationName
+            $priceStr = if ($price) { " `$$price/hr" } else { "" }
+            $qtyStr = if ($Quantity -gt 1) { " x$Quantity" } else { "" }
+            Write-Host "SUCCESS$priceStr$qtyStr" -ForegroundColor Green
+            Write-Host "`nCreated ODCR $crId in $($t.AZLabel)" -ForegroundColor Green
+            Write-Host "`nTo launch into this ODCR:" -ForegroundColor White
+            Write-Host "  New-EC2Instance -Region $($t.Region) -InstanceType $InstanceType -CapacityReservationTarget_CapacityReservationId $crId ..." -ForegroundColor Yellow
+            Write-Host "  Console: https://console.aws.amazon.com/ec2/home?region=$($t.Region)#CapacityReservations:" -ForegroundColor Cyan
+            Write-Host "`nTo cancel when done:" -ForegroundColor Yellow
+            Write-Host "  Remove-EC2CapacityReservation -CapacityReservationId $crId -Region $($t.Region) -Force" -ForegroundColor Yellow
+            $reserved = $true
+            break
+        } catch {
+            Write-Host "    FAILED: $($_.Exception.Message)" -ForegroundColor Yellow
+        }
+    }
+}
+
+if (-not $reserved) {
+    Write-Host "`nFailed to reserve capacity for $InstanceType in any region." -ForegroundColor Red
+}
