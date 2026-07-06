@@ -27,6 +27,12 @@ const config = {
 
   onBrokenLinks: 'warn',
 
+  // Disable the inline base-url-issue banner script. It writes
+  // window.location.pathname into innerHTML, which static security scanners
+  // (e.g. ACAT) flag as DOM-based XSS. The script is only a diagnostic aid for
+  // misconfigured baseUrl, so it's safe to turn off on a working deployment.
+  baseUrlIssueBanner: false,
+
   markdown: {
     mermaid: true,
     hooks: {
