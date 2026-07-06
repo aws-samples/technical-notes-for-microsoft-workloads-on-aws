@@ -1,3 +1,9 @@
+---
+title: FindEC2Capacity_ODCR Documentation
+sidebar_label: Full Documentation
+slug: /Code Repo/FindEC2Capacity_ODCR/documentation
+---
+
 # FindEC2Capacity_ODCR.ps1
 
 Creates an [On-Demand Capacity Reservation](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-capacity-reservations.html) (ODCR) for a specified EC2 instance type.
@@ -135,7 +141,7 @@ Remove-EC2CapacityReservation -CapacityReservationId cr-0abc123... -Region us-ea
 8. Automatically cancels any unchosen reservations
 9. Enter to cancel all, or comma-separated numbers to keep (e.g. `1,3`)
 
-![ODCR](../screenshots/parallel.png)
+![ODCR](./images/parallel.png)
 
 ### Sequential (-Sequential)
 1. Same region and AZ discovery as parallel
@@ -163,7 +169,7 @@ Use when you need a large number of instances (e.g. multiple p5.4xlarge) or want
 
 Finding 5 g6e.4xlarge slots in us-east-2.
 
-![ODCR](../screenshots/TargetQuantity.png)
+![ODCR](./images/TargetQuantity.png)
 
 
 ## Author
