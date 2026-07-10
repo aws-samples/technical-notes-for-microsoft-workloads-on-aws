@@ -7,11 +7,11 @@ sidebar_label: RDS SQL Server Pricing
 
 ## Use Case
 
-When sizing or right-sizing Amazon RDS for SQL Server, choosing the right instance family and size requires understanding the **true total cost** — not just the base compute price. Newer-generation instances (db.m7i, db.m8i, db.m8a, etc.) use **unbundled pricing**, where SQL Server and Windows license fees are separate line items added on top of compute. Older generations (m5, r5, r6i) bundle everything into a single price.
+When sizing or right-sizing Amazon RDS for SQL Server, choosing the right instance family and size requires understanding the **true total cost** — not just the base compute price. Newer-generation instances (db.m7i, db.m8i, db.m8a, etc.) use **unbundled pricing**, where SQL Server and Windows license fees are separate line items added on top of compute. Older generations (m5, r5, r6i) bundle compute, Windows, and SQL into a single price.
 
 This makes apples-to-apples comparison difficult:
 
-- **"Which is cheaper — an r6i.8xlarge or an r8i.8xlarge?"** The Pricing API shows a lower number for db.r8i, but SQL Server and Windows license fees need to added.
+- **"Which is cheaper — an r6i.8xlarge or an r8i.8xlarge?"** The Pricing API shows a lower number for db.r8i, but SQL Server and Windows license fees need to be added.
 - **"How much would I save with BYOM (Bring Your Own Media)?"** You need to know which families support BYOM and what the license-fee delta is.
 - **"What's the 1-year commitment discount?"** Unbundled instances use Database Savings Plans; bundled ones use Reserved Instances — different APIs and calculations.
 - **"What physical core count do I actually get with Optimize CPU?"** The default core count (relevant for SQL Server licensing) isn't visible in the console pricing page.
