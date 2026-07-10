@@ -7,13 +7,13 @@ sidebar_label: RDS SQL Server Pricing
 
 ## Use Case
 
-When sizing or right-sizing Amazon RDS for SQL Server, choosing the right instance family and size requires understanding the **true total cost** — not just the base compute price. Newer-generation instances (m7i, m8i, r8i, etc.) use **unbundled pricing**, where SQL Server and Windows license fees are separate line items added on top of compute. Older generations (m5, r5, r6i) bundle everything into a single price.
+When sizing or right-sizing Amazon RDS for SQL Server, choosing the right instance family and size requires understanding the **true total cost** — not just the base compute price. Newer-generation instances (db.m7i, db.m8i, db.m8a, etc.) use **unbundled pricing**, where SQL Server and Windows license fees are separate line items added on top of compute. Older generations (m5, r5, r6i) bundle compute, Windows, and SQL into a single price.
 
 This makes apples-to-apples comparison difficult:
 
-- **"Which is cheaper — an r6i.8xlarge or an r8i.8xlarge?"** The Pricing API shows a lower number for r8i, but after adding SQL Server and Windows license fees the answer may differ.
+- **"Which is cheaper — an r6i.8xlarge or an r8i.8xlarge?"** The Pricing API shows a lower number for db.r8i, but SQL Server and Windows license fees need to be added.
 - **"How much would I save with BYOM (Bring Your Own Media)?"** You need to know which families support BYOM and what the license-fee delta is.
-- **"What's the 1-year commitment discount?"** Unbundled instances use Database Savings Plans; bundled ones use Reserved Instances — different APIs, different math.
+- **"What's the 1-year commitment discount?"** Unbundled instances use Database Savings Plans; bundled ones use Reserved Instances — different APIs and calculations.
 - **"What physical core count do I actually get with Optimize CPU?"** The default core count (relevant for SQL Server licensing) isn't visible in the console pricing page.
 
 `Show-RdsSqlPricing.ps1` answers all of these in a single table, pulling live data from the AWS Pricing, RDS, EC2, and Savings Plans APIs.
@@ -63,7 +63,9 @@ Optional (for commitment pricing): `AWS.Tools.SavingsPlans`
 
 ## Script Reference
 
-See the full [README](README.md) for complete parameter documentation, output column descriptions, and pricing logic details.
+See the full [README](https://github.com/aws-samples/technical-notes-for-microsoft-workloads-on-aws/blob/main/docusaurus/docs/SQL%20Server/Guides/Show-RdsSqlPricing/README.md) for complete parameter documentation, output column descriptions, and pricing logic details.
+
+Download [Show-RdsSqlPricing.ps1](https://github.com/aws-samples/technical-notes-for-microsoft-workloads-on-aws/blob/main/docusaurus/docs/SQL%20Server/Guides/Show-RdsSqlPricing/Show-RdsSqlPricing.ps1) here.
 
 ---
 
