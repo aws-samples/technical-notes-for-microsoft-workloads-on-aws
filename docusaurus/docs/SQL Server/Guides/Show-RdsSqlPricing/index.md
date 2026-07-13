@@ -4,16 +4,17 @@ sidebar_label: RDS SQL Server Pricing
 ---
 
 # Compare RDS for SQL Server Instance Pricing
+by Craig Cooley
 
 ## Use Case
 
-When sizing or right-sizing Amazon RDS for SQL Server, choosing the right instance family and size requires understanding the **true total cost** — not just the base compute price. Newer-generation instances (db.m7i, db.m8i, db.m8a, etc.) use **unbundled pricing**, where SQL Server and Windows license fees are separate line items added on top of compute. Older generations (m5, r5, r6i) bundle compute, Windows, and SQL into a single price.
+When sizing or right-sizing Amazon RDS for SQL Server, choosing the right instance family and size requires understanding the **true total cost** — not just the base compute price. Newer-generation instances (m7i, m8i, m8a, etc.) use **unbundled pricing**, where SQL Server and Windows license fees are separate line items added on top of compute. Older generations (m5, r5, r6i) bundle everything into a single price.
 
-This makes apples-to-apples comparison difficult:
+This can make comparison difficult:
 
-- **"Which is cheaper — an r6i.8xlarge or an r8i.8xlarge?"** The Pricing API shows a lower number for db.r8i, but SQL Server and Windows license fees need to be added.
+- **"Which is most cost effective — an r6i.8xlarge or an r8i.8xlarge?"** The r6i is priced as 'bundled' and the r8i is priced as 'unbundled'.  Knowing how costs are calculated for each is important to lowering costs. 
 - **"How much would I save with BYOM (Bring Your Own Media)?"** You need to know which families support BYOM and what the license-fee delta is.
-- **"What's the 1-year commitment discount?"** Unbundled instances use Database Savings Plans; bundled ones use Reserved Instances — different APIs and calculations.
+- **"What's the 1-year commitment discount?"** Unbundled instances use Database Savings Plans; bundled ones use Reserved Instances — different APIs, different math.
 - **"What physical core count do I actually get with Optimize CPU?"** The default core count (relevant for SQL Server licensing) isn't visible in the console pricing page.
 
 `Show-RdsSqlPricing.ps1` answers all of these in a single table, pulling live data from the AWS Pricing, RDS, EC2, and Savings Plans APIs.
@@ -57,9 +58,9 @@ Optional (for commitment pricing): `AWS.Tools.SavingsPlans`
 - SQL Server license fees calculated with the **Microsoft 4-vCPU minimum**
 - **BYOM support** — filters to eligible families and removes the SQL Server fee
 - **Physical core counts** (default + max) from RDS Orderable Instance Options
-- **Network bandwidth**, **max EBS throughput**, and **max IOPS** per instance
+- **Network bandwidth**, **max EBS throughput**, and **max IOPS** per instance — the storage and network ceilings that matter for right-sizing, not just vCPU and RAM
 - **1-year commitment pricing** (Database Savings Plan or Reserved Instance)
-- Multi-AZ aware — correct license doubling for Windows OS only (SQL Server passive failover rights)
+- Multi-AZ or Single-AZ options
 
 ## Script Reference
 

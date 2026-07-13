@@ -405,7 +405,10 @@ $results = $allProducts | ForEach-Object {
             Max_IOPS     = if ($ec2) { $ec2.EbsInfo.EbsOptimizedInfo.MaximumIops -as [int] } else { $null }
         }
         if ($ShowBreakdown) {
-            $obj['Compute'] = [Math]::Round($computeHr * $Hours, $priceDp)
+            # Breakdown only applies to unbundled instances. Bundled/older-gen have a single all-in
+            # price (license included) shown in Price_OD, so leave all component columns blank rather
+            # than repeat the total under "Compute".
+            $obj['Compute'] = if ($isUnbundled) { [Math]::Round($computeHr * $Hours, $priceDp) } else { $null }
             # Use ($null -ne ...) not truthiness: a BYOM SQL charge of 0 is a real value, not "no value".
             $obj['SQL']     = if ($null -ne $sqlHr) { [Math]::Round($sqlHr * $Hours, $priceDp) } else { $null }
             $obj['Win']     = if ($null -ne $winHr) { [Math]::Round($winHr * $Hours, $priceDp) } else { $null }
