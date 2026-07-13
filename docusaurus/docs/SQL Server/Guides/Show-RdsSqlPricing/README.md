@@ -51,7 +51,7 @@ Optional (for `-DBSP_RI_1y`): `AWS.Tools.SavingsPlans`
 ## Example output
 
 ```powershell
-./Show-RdsSqlPricing.ps1 -Region us-east-1 -Family r -Size 16xlarge -Edition Enterprise -Deployment Multi-AZ -DBSP_RI_1y -ShowBreakdown
+./Show-RdsSqlPricing.ps1 -Region us-east-1 -Family m -Size 16xlarge -Edition Enterprise -Deployment Multi-AZ -DBSP_RI_1y -ShowBreakdown
 ```
 
 ![Show-RdsSqlPricing sample output](Show-RdsSqlPricing-sample.png)
@@ -140,6 +140,7 @@ Optional (for `-DBSP_RI_1y`): `AWS.Tools.SavingsPlans`
 - Instance availability varies by region — some families may not appear in all regions.
 - **Developer edition**: Pulls both "Developer" (bundled, older gen) and "Enterprise Developer" (unbundled, newer gen) from the API. The Pricing API may list instances (e.g. m5, r5) that are not actually orderable for Developer — refer to the [DB instance class support page](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/SQLServer.Concepts.General.InstanceClasses.html) for actual availability.
 - **EBS specs**: `Max_MB/s` and `Max_IOPS` come from EC2 `DescribeInstanceTypes` (the same data the RDS hardware spec docs publish) and scale by instance size. RDS-exclusive types with no EC2 equivalent (e.g. db.x2m) show blank for these columns.
+- **`-ShowBreakdown` for bundled instances**: The component columns (`Compute`, `SQL`, `Win`) are blank for bundled/older-gen instances — the API returns a single all-in price (licenses included), which is shown in `Price_OD`. The component breakdown is only meaningful for unbundled instances.
 
 ---
 
