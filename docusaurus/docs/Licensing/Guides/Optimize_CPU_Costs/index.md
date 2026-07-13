@@ -5,6 +5,7 @@ description: Reduce Microsoft license included costs on EC2 by adjusting Threads
 ---
 
 # Optimize CPU Costs for Windows Licensing
+By Craig Cooley
 
 Reduce Microsoft licensing costs on Amazon EC2 and SQL Server instances by disabling hyperthreading (setting `ThreadsPerCore = 1`). This PowerShell script calculates potential savings and helps you understand the cost impact across instance types.
 
