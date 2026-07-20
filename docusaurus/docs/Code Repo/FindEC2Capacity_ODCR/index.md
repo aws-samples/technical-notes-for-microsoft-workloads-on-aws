@@ -5,6 +5,7 @@ sidebar_position: 2
 ---
 
 # Find EC2 Capacity with On-Demand Capacity Reservations
+by Craig Cooley
 
 ## The Problem
 
@@ -34,7 +35,7 @@ When launching GPU, HPC, or other high-demand EC2 instance types, you often get 
 
 ### Supported Platforms
 
-- **Windows** and **Linux** instance reservations
+- **All EC2 capacity-reservation platforms** — Windows, Linux, Ubuntu Pro, Red Hat Enterprise Linux, SUSE Linux, and the SQL Server / RHEL HA variants (matches the AWS API, queried dynamically). `Linux` is a friendly alias for `Linux/UNIX`.
 - All EC2 instance types (validated against the AWS Pricing API)
 - All commercially available AWS regions
 
@@ -51,10 +52,10 @@ pwsh
 
 ### Get Started
 
-📖 **[Full documentation and examples →](./README.md)**
+📖 **[Full documentation and examples →](https://github.com/aws-samples/technical-notes-for-microsoft-workloads-on-aws/blob/main/docusaurus/docs/Code%20Repo/FindEC2Capacity_ODCR/Scripts/README.md)**
 
-📥 **[Download FindEC2Capacity_ODCR.ps1](https://github.com/aws-samples/technical-notes-for-microsoft-workloads-on-aws/blob/main/docusaurus/docs/Code%20Repo/FindEC2Capacity_ODCR/FindEC2Capacity_ODCR.ps1)**
+📥 **[Download FindEC2Capacity_ODCR.ps1](https://github.com/aws-samples/technical-notes-for-microsoft-workloads-on-aws/blob/main/docusaurus/docs/Code%20Repo/FindEC2Capacity_ODCR/Scripts/FindEC2Capacity_ODCR.ps1)**
 
 ---
 
-*Author: Craig Cooley (coolcrai@) — Built with Kiro IDE + Claude Opus 4.6*
+*Author: Craig Cooley (coolcrai@) — Built with Kiro IDE + Claude Opus 4.8*
