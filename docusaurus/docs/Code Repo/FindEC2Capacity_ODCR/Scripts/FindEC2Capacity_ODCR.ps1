@@ -83,7 +83,7 @@
 
 .NOTES
     Author: Craig Cooley ([email])
-    Built with: Kiro IDE + Claude Opus 4.6
+    Built with: Kiro IDE + Claude Opus 4.8
     Requires: AWS.Tools.EC2, AWS.Tools.Pricing (for pricing + Windows validation), PowerShell 7+
     Recommended: Run in AWS CloudShell
 
