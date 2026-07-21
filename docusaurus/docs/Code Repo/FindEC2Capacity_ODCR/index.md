@@ -58,4 +58,3 @@ pwsh
 
 ---
 
-*Author: Craig Cooley (coolcrai@) — Built with Kiro IDE + Claude Opus 4.8*
