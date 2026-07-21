@@ -35,14 +35,14 @@ You can then launch instances into the capacity reservation, stop or terminate, 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `-InstanceType` | *(required)* | EC2 instance type to reserve |
-| `-OS` | *(required)* | `Windows` or `Linux` (sets the reservation platform) |
+| `-OS` | *(required)* | Reservation platform, matching the AWS API. Accepts `Windows`, `Ubuntu Pro`, `Red Hat Enterprise Linux`, `SUSE Linux`, plus the SQL Server and RHEL HA variants. `Linux` is a friendly alias for `Linux/UNIX`. Quote values that contain spaces, e.g. `-OS "Ubuntu Pro"`. Matching is case-insensitive, and the valid list is queried live from the EC2 SDK so it stays in sync with AWS. |
 | `-RegionGroup` | *(none)* | `us`, `us+` (Americas), `eu`, `ap`, or `all`. Must be set explicitly — there is no implicit default, since the script creates billable reservations. Use one of `-RegionGroup`, `-Region`, or `-Zone`. |
 | `-Region` | *(none)* | Specific region(s) to try (overrides `-RegionGroup`). Multiple: `us-east-1,us-east-2` (no spaces) |
 | `-Zone` | *(none)* | Specific AZ(s) to try. Accepts names (`us-east-1a,us-east-2b`) or zone IDs (`use1-az1,use2-az2`). Overrides `-Region`/`-RegionGroup`. |
 | `-Quantity` | `1` | Slots per single ODCR request. In `-TargetQuantity` mode, this is the increment size for each expansion attempt. |
 | `-TargetQuantity` | *(none)* | Total slots to accumulate across AZs (with retries). Unlike `-Quantity` which is per-request, this is the overall target. Requires `-Region` or `-Zone`. |
-| `-TargetTimeout` | `0` | Max minutes to spend accumulating capacity in `-TargetQuantity` mode. `0` (default) = single run (one sweep, no retry); e.g. `5` retries for 5 minutes. |
-| `-TargetQuantityInterval` | `1` | Minutes between retry attempts in `-TargetQuantity` mode |
+| `-TargetTimeout` | `0` | Max minutes to spend accumulating capacity in `-TargetQuantity` mode. Accepts decimals (`0.5` = 30s). `0` (default) = single run (one sweep, no retry); e.g. `5` retries for 5 minutes. |
+| `-TargetQuantityInterval` | `1` | Minutes to wait between retry attempts in `-TargetQuantity` mode. Accepts decimals (`0.5` = 30s); use `0` to retry back-to-back with no wait. |
 | `-CapacityReservationId` | *(none)* | Expand a specific existing CR directly, skipping region/AZ discovery. Requires `-TargetQuantity` (the size to grow to) and `-Region` (the CR's region). |
 | `-InstanceMatchCriteria` | `open` | `open` (any matching instance uses the reservation) or `targeted` (must specify CR ID at launch) |
 | `-Sequential` | *(off)* | Tries AZs one at a time, stops on first success |
@@ -62,6 +62,9 @@ Find capacity and create a single ODCR. Parallel mode tries all AZs at once and 
 
 # Reserve 4 Linux i4i.metal slots in us-east-1 or us-east-2
 .\FindEC2Capacity_ODCR.ps1 -OS Linux -InstanceType i4i.metal -Quantity 4 -Region us-east-1,us-east-2
+
+# Reserve an Ubuntu Pro instance (quote platform values that contain spaces)
+.\FindEC2Capacity_ODCR.ps1 -OS "Ubuntu Pro" -InstanceType g6e.2xlarge -Region us-east-2
 
 # Sequential mode - stops on first success (EU regions)
 .\FindEC2Capacity_ODCR.ps1 -OS Windows -InstanceType g7e.4xlarge -RegionGroup eu -Sequential
@@ -97,6 +100,9 @@ Accumulate a target number of slots by creating and expanding ODCRs. Retries per
     -TargetQuantity 4 `
     -TargetTimeout 5 `
     -TargetQuantityInterval 2
+
+# Hunt hard for 30 seconds: 0.5 min timeout, re-checking back-to-back (interval 0)
+.\FindEC2Capacity_ODCR.ps1 -OS "Ubuntu Pro" -InstanceType g6e.48xlarge -Zone usw2-az1 -TargetQuantity 1 -TargetTimeout 0.5 -TargetQuantityInterval 0
 
 # Expand a specific existing reservation directly to 8 slots
 .\FindEC2Capacity_ODCR.ps1 `
@@ -141,7 +147,7 @@ Remove-EC2CapacityReservation -CapacityReservationId cr-0abc123... -Region us-ea
 8. Automatically cancels any unchosen reservations
 9. Enter to cancel all, or comma-separated numbers to keep (e.g. `1,3`)
 
-![ODCR](./images/parallel.png)
+![ODCR](../images/parallel.png)
 
 ### Sequential (-Sequential)
 1. Same region and AZ discovery as parallel
@@ -169,9 +175,9 @@ Use when you need a large number of instances (e.g. multiple p5.4xlarge) or want
 
 Finding 5 g6e.4xlarge slots in us-east-2.
 
-![ODCR](./images/TargetQuantity.png)
+![ODCR](../images/TargetQuantity.png)
 
 
 ## Author
 
-Craig Cooley coolcrai@ — Built with Kiro IDE + Claude Opus 4.6
+Craig Cooley coolcrai@ — Built with Kiro IDE + Claude Opus 4.8

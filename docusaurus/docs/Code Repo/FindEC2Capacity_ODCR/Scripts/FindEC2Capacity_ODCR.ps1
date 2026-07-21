@@ -15,7 +15,20 @@
     EC2 instance type to reserve (required).
 
 .PARAMETER OS
-    Instance platform for the reservation (required): Windows or Linux.
+    Instance platform for the reservation (required). Accepts any EC2 capacity-reservation
+    platform, matching the AWS API. The valid set is queried live from the EC2 SDK (so it
+    stays in sync with AWS), is offered via Tab completion, and an invalid value prints the
+    full list. Values include:
+      Linux            friendly alias for "Linux/UNIX"
+      Windows
+      Ubuntu Pro
+      Red Hat Enterprise Linux
+      SUSE Linux
+      Windows with SQL Server (Standard | Enterprise | Web)
+      Linux with SQL Server (Standard | Enterprise | Web)
+      RHEL with SQL Server (Standard | Enterprise | Web), RHEL with HA (+ SQL variants)
+    Values with spaces must be quoted, e.g. -OS "Ubuntu Pro". Matching is case-insensitive.
+    See: https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-capacity-reservations.html
 
 .PARAMETER Quantity
     Number of instances per ODCR attempt / increment size for -TargetQuantity (default: 1).
@@ -41,11 +54,14 @@
 
 .PARAMETER TargetTimeout
     Maximum minutes to spend accumulating capacity in -TargetQuantity mode (default: 0).
+    Accepts decimals, so fractional minutes work: 0.5 = 30 seconds, 0.25 = 15 seconds.
     Default (0) does a single run: one sweep of all AZs with no waiting/retry.
     Set to e.g. 5 to keep retrying for 5 minutes, re-sweeping at -TargetQuantityInterval.
 
 .PARAMETER TargetQuantityInterval
-    Minutes between retry attempts in -TargetQuantity mode (default: 1).
+    Minutes to wait between retry attempts in -TargetQuantity mode (default: 1).
+    Accepts decimals (0.5 = 30s). Use 0 to retry back-to-back with no wait (each sweep
+    still takes however long the AWS API calls take, typically several seconds).
 
 .PARAMETER InstanceMatchCriteria
     open (default): any matching instance in the AZ automatically uses the reservation.
@@ -67,7 +83,7 @@
 
 .NOTES
     Author: Craig Cooley ([email])
-    Built with: Kiro IDE + Claude Opus 4.6
+    Built with: Kiro IDE + Claude Opus 4.8
     Requires: AWS.Tools.EC2, AWS.Tools.Pricing (for pricing + Windows validation), PowerShell 7+
     Recommended: Run in AWS CloudShell
 
@@ -100,6 +116,10 @@
     Creates Linux ODCRs for 4x i4i.metal in us-east-1 or us-east-2, prompts which to keep or cancel
 
 .EXAMPLE
+    .\FindEC2Capacity_ODCR.ps1 -OS "Ubuntu Pro" -InstanceType g7e.2xlarge -Region us-east-2
+    Creates an Ubuntu Pro ODCR for g7e.2xlarge in us-east-2 (quote platforms that contain spaces)
+
+.EXAMPLE
     .\FindEC2Capacity_ODCR.ps1 -OS Windows -InstanceType g7e.4xlarge -RegionGroup eu -Sequential
     Tries AZs one at a time across EU regions, stops on first success
 
@@ -124,6 +144,10 @@
     Accumulates 4 slots across the given AZs, retrying every 2 min for up to 5 min
 
 .EXAMPLE
+    .\FindEC2Capacity_ODCR.ps1 -OS Linux -InstanceType g7e.large -Region us-east-2 -TargetQuantity 4 -TargetTimeout 0.5 -TargetQuantityInterval 0
+    Accumulates 4 slots in us-east-2, retrying back-to-back for 30 seconds (0.5 min)
+
+.EXAMPLE
     .\FindEC2Capacity_ODCR.ps1 -OS Windows -InstanceType g7e.4xlarge -Region us-east-2 -CapacityReservationId cr-0abc123 -TargetQuantity 8
     Expands a specific existing reservation directly to 8 slots
 
@@ -136,12 +160,32 @@ Param (
     [Parameter(Mandatory)]
     [string]$InstanceType,
     [Parameter(Mandatory)]
-    [ValidateSet("Windows", "Linux")]
+    [ArgumentCompleter({
+        # Dynamic Tab-completion: pull the live list of capacity-reservation
+        # platforms straight from the EC2 SDK so it always matches the API,
+        # plus the friendly "Linux" alias for "Linux/UNIX".
+        param($commandName, $parameterName, $wordToComplete, $commandAst, $fakeBoundParameters)
+        $platforms = @('Linux')
+        try {
+            if (-not ('Amazon.EC2.CapacityReservationInstancePlatform' -as [type])) {
+                Import-Module AWS.Tools.EC2 -ErrorAction Stop
+            }
+            $platforms += [Amazon.EC2.CapacityReservationInstancePlatform].GetFields([System.Reflection.BindingFlags]'Public,Static').ForEach({ $_.GetValue($null).Value })
+        } catch {
+            $platforms += @('Linux/UNIX', 'Windows', 'Ubuntu Pro', 'Red Hat Enterprise Linux', 'SUSE Linux')
+        }
+        $word = $wordToComplete.Trim('"', "'")
+        $platforms | Sort-Object -Unique | Where-Object { $_ -like "$word*" } | ForEach-Object {
+            # Quote values that contain spaces or slashes so they complete as one token
+            $text = if ($_ -match '[\s/]') { "'$_'" } else { $_ }
+            [System.Management.Automation.CompletionResult]::new($text, $_, 'ParameterValue', $_)
+        }
+    })]
     [string]$OS,
     [int]$Quantity = 1,
     [int]$TargetQuantity,
-    [int]$TargetTimeout = 0,
-    [int]$TargetQuantityInterval = 1,
+    [double]$TargetTimeout = 0,
+    [double]$TargetQuantityInterval = 1,
     [switch]$Sequential,
     [string[]]$Region,
     [string[]]$Zone,
@@ -183,12 +227,6 @@ if ($CapacityReservationId -and -not $TargetQuantity) {
     exit 1
 }
 
-# -TargetTimeout and -TargetQuantityInterval are specified in minutes; convert to seconds for the stopwatch/sleep logic.
-$TargetTimeoutSec = $TargetTimeout * 60
-$TargetQuantityIntervalSec = $TargetQuantityInterval * 60
-# Label for the timeout shown in output (0 = a single run with no retry)
-$timeoutLabel = if ($TargetTimeout -le 0) { "single run, no retry" } else { "timeout: ${TargetTimeout}m" }
-
 # Format a duration in seconds as a friendly string (e.g. "4m 30s", "45s")
 function Format-Duration([double]$seconds) {
     $s = [int][Math]::Round($seconds)
@@ -200,7 +238,62 @@ function Format-Duration([double]$seconds) {
     return "${s}s"
 }
 
+# -TargetTimeout and -TargetQuantityInterval are specified in minutes and accept decimals,
+# so fractional minutes work (0.5 = 30s, 0.25 = 15s). Convert to seconds for the stopwatch/sleep logic.
+$TargetTimeoutSec = $TargetTimeout * 60
+$TargetQuantityIntervalSec = $TargetQuantityInterval * 60
+# Label for the timeout shown in output (0 = a single run with no retry)
+$timeoutLabel = if ($TargetTimeout -le 0) { "single run, no retry" } else { "timeout: $(Format-Duration $TargetTimeoutSec)" }
+
 Import-Module AWS.Tools.EC2
+
+# Resolve -OS to a real EC2 InstancePlatform value.
+# The valid set is queried live from the EC2 SDK so it always matches the API
+# (Linux/UNIX, Windows, Ubuntu Pro, Red Hat Enterprise Linux, SUSE Linux, the
+# SQL Server variants, the RHEL HA variants, etc). We also accept the friendly
+# alias "Linux" for "Linux/UNIX"; "Windows" and the rest already match the API.
+try {
+    $apiPlatforms = @([Amazon.EC2.CapacityReservationInstancePlatform].GetFields([System.Reflection.BindingFlags]'Public,Static').ForEach({ $_.GetValue($null).Value }))
+} catch {
+    Write-Host "Could not query the platform list from the EC2 SDK; falling back to a built-in list." -ForegroundColor DarkYellow
+    $apiPlatforms = @(
+        'Linux/UNIX', 'Red Hat Enterprise Linux', 'SUSE Linux', 'Windows',
+        'Windows with SQL Server', 'Windows with SQL Server Enterprise',
+        'Windows with SQL Server Standard', 'Windows with SQL Server Web',
+        'Linux with SQL Server Standard', 'Linux with SQL Server Web',
+        'Linux with SQL Server Enterprise', 'RHEL with SQL Server Standard',
+        'RHEL with SQL Server Enterprise', 'RHEL with SQL Server Web',
+        'RHEL with HA', 'RHEL with HA and SQL Server Standard',
+        'RHEL with HA and SQL Server Enterprise', 'Ubuntu Pro'
+    )
+}
+
+if ($OS -eq 'Linux') {
+    # Friendly alias -> canonical API value
+    $platform = 'Linux/UNIX'
+} else {
+    # Case-insensitive match to the canonical API value (so "windows" -> "Windows")
+    $platform = $apiPlatforms | Where-Object { $_ -eq $OS } | Select-Object -First 1
+    if (-not $platform) {
+        Write-Host "Invalid -OS '$OS'. Valid values:" -ForegroundColor Red
+        Write-Host "  Linux    (friendly alias for Linux/UNIX)" -ForegroundColor DarkYellow
+        foreach ($p in ($apiPlatforms | Sort-Object)) { Write-Host "  $p" -ForegroundColor DarkYellow }
+        exit 1
+    }
+    $OS = $platform  # canonicalize the display value
+}
+
+# Map the resolved platform to Pricing API filter values (best-effort; pricing is
+# display-only and degrades gracefully to "no price" if a variant isn't matched).
+$pricingOs = if ($platform -like 'Windows*') { 'Windows' }
+    elseif ($platform -like 'Ubuntu*') { 'Ubuntu Pro' }
+    elseif ($platform -like 'RHEL*' -or $platform -like 'Red Hat*') { 'RHEL' }
+    elseif ($platform -like 'SUSE*') { 'SUSE' }
+    else { 'Linux' }
+$pricingSw = if ($platform -like '*SQL Server Enterprise*') { 'SQL Ent' }
+    elseif ($platform -like '*SQL Server Web*') { 'SQL Web' }
+    elseif ($platform -like '*SQL Server*') { 'SQL Std' }
+    else { 'NA' }
 
 # Get current account ID (used to filter owned CRs in TargetQuantity mode)
 $accountId = (Get-STSCallerIdentity -ErrorAction SilentlyContinue).Account
@@ -217,7 +310,6 @@ try {
 
 # On-demand pricing lookup
 $priceCache = @{}
-$osFilter = if ($OS -eq "Windows") { "Windows" } else { "Linux" }
 
 function Get-OnDemandPrice([string]$regionCode, [string]$locationName) {
     if ($script:priceCache.ContainsKey($regionCode)) { return $script:priceCache[$regionCode] }
@@ -232,9 +324,9 @@ function Get-OnDemandPrice([string]$regionCode, [string]$locationName) {
             $products = Get-PLSProduct -ServiceCode AmazonEC2 -Region us-east-1 -Filter @(
                 @{Type='TERM_MATCH'; Field='instanceType'; Value=$script:InstanceType},
                 @{Type='TERM_MATCH'; Field='location'; Value=$loc},
-                @{Type='TERM_MATCH'; Field='operatingSystem'; Value=$script:osFilter},
+                @{Type='TERM_MATCH'; Field='operatingSystem'; Value=$script:pricingOs},
                 @{Type='TERM_MATCH'; Field='tenancy'; Value='Shared'},
-                @{Type='TERM_MATCH'; Field='preInstalledSw'; Value='NA'},
+                @{Type='TERM_MATCH'; Field='preInstalledSw'; Value=$script:pricingSw},
                 @{Type='TERM_MATCH'; Field='capacitystatus'; Value='Used'}
             ) -ErrorAction SilentlyContinue
             foreach ($p in $products) {
@@ -272,8 +364,10 @@ try {
     exit 1
 }
 
-# Validate Windows support via Pricing API
-if ($OS -eq "Windows" -and $pricingAvailable) {
+# Validate Windows support via Pricing API. This catches instance types that are
+# Linux-only up front (many GPU/metal families). It's a base-Windows check, so it
+# also covers the Windows-with-SQL variants (if base Windows isn't offered, neither are they).
+if ($platform -like 'Windows*' -and $pricingAvailable) {
     try {
         $osCheck = Get-PLSProduct -ServiceCode AmazonEC2 -Region us-east-1 -Filter @(
             @{Type='TERM_MATCH'; Field='instanceType'; Value=$InstanceType},
@@ -428,7 +522,6 @@ if ($azData.Count -eq 0) {
     exit 1
 }
 
-$platform = if ($OS -eq "Windows") { "Windows" } else { "Linux/UNIX" }
 $reserved = $false
 
 # Build AZ targets in priority order (filter by -Zone if specified)
@@ -484,10 +577,12 @@ if ($TargetQuantity) {
                 Write-Host "SUCCESS (qty=$currentQty/$TargetQuantity)" -ForegroundColor Green
             } catch {
                 Write-Host "    FAILED: $($_.Exception.Message)" -ForegroundColor Yellow
-                $remaining = [Math]::Round($TargetTimeoutSec - $stopwatch.Elapsed.TotalSeconds)
-                if ($remaining -gt 0 -and $currentQty -lt $TargetQuantity) {
-                    Write-Host "  [$(Get-Date -Format 'HH:mm:ss')] Retrying in $(Format-Duration $TargetQuantityIntervalSec)... ($(Format-Duration $remaining) remaining)" -ForegroundColor DarkGray
-                    Start-Sleep -Seconds ([Math]::Min($TargetQuantityIntervalSec, $remaining))
+                $remainingSec = $TargetTimeoutSec - $stopwatch.Elapsed.TotalSeconds
+                if ($remainingSec -gt 0 -and $currentQty -lt $TargetQuantity) {
+                    $waitSec = [Math]::Min($TargetQuantityIntervalSec, $remainingSec)
+                    $waitLabel = if ($waitSec -le 0) { "immediately" } else { "in $(Format-Duration $waitSec)" }
+                    Write-Host "  [$(Get-Date -Format 'HH:mm:ss')] Retrying $waitLabel... ($(Format-Duration $remainingSec) remaining)" -ForegroundColor DarkGray
+                    if ($waitSec -gt 0) { Start-Sleep -Milliseconds ([int]($waitSec * 1000)) }
                 } else { break }
             }
         }
@@ -615,10 +710,12 @@ if ($TargetQuantity) {
 
         # If no progress on this pass and all AZs either exhausted or failed, wait and retry
         if (-not $madeProgress -and $totalReserved -lt $TargetQuantity -and $stopwatch.Elapsed.TotalSeconds -lt $TargetTimeoutSec) {
-            $remaining = [Math]::Round($TargetTimeoutSec - $stopwatch.Elapsed.TotalSeconds)
-            if ($remaining -gt 0) {
-                Write-Host "`n  [$(Get-Date -Format 'HH:mm:ss')] Retrying in $(Format-Duration $TargetQuantityIntervalSec)... ($(Format-Duration $remaining) remaining)" -ForegroundColor DarkGray
-                Start-Sleep -Seconds ([Math]::Min($TargetQuantityIntervalSec, $remaining))
+            $remainingSec = $TargetTimeoutSec - $stopwatch.Elapsed.TotalSeconds
+            if ($remainingSec -gt 0) {
+                $waitSec = [Math]::Min($TargetQuantityIntervalSec, $remainingSec)
+                $waitLabel = if ($waitSec -le 0) { "immediately" } else { "in $(Format-Duration $waitSec)" }
+                Write-Host "`n  [$(Get-Date -Format 'HH:mm:ss')] Retrying $waitLabel... ($(Format-Duration $remainingSec) remaining)" -ForegroundColor DarkGray
+                if ($waitSec -gt 0) { Start-Sleep -Milliseconds ([int]($waitSec * 1000)) }
             }
         }
     }
