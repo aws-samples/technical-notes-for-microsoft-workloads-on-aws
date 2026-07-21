@@ -180,4 +180,4 @@ Finding 5 g6e.4xlarge slots in us-east-2.
 
 ## Author
 
-Craig Cooley coolcrai@ — Built with Kiro IDE + Claude Opus 4.6
+Craig Cooley coolcrai@ — Built with Kiro IDE + Claude Opus 4.8
