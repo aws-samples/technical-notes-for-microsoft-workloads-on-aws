@@ -66,7 +66,7 @@
     "imagemin-gifsicle": "^7.0.0",
     "imagemin-jpegtran": "^8.0.0",
     "imagemin-optipng": "^8.0.0",
-    "imagemin-svgo": "^11.0.1",
+    "imagemin-svgo": "^12.0.0",
     "immer": "^10.1.1",
     "jpegtran-bin": "^7.0.0",
     "loader-utils": "^3.3.1",
