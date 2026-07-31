@@ -9,11 +9,11 @@ by Craig Cooley
 
 ## The Problem
 
-When launching GPU, HPC, or other high-demand EC2 instance types, you often get `InsufficientInstanceCapacity` errors — capacity simply isn't available in the AZ you tried. Manually checking each region and AZ one-by-one is time-consuming, especially when you need instances urgently for a customer POC, benchmark, or migration.
+When launching GPU or other high-demand EC2 instance types, you may see `InsufficientInstanceCapacity` errors when capacity simply isn't available in the Availability Zone you tried. Manually checking each region and AZ one-by-one is time-consuming, especially when you need instances urgently for a customer POC, benchmark, or migration.
 
 ## The Solution
 
-**FindEC2Capacity_ODCR.ps1** automates the capacity hunt by creating [On-Demand Capacity Reservations](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-capacity-reservations.html) (ODCRs) across all supported AZs simultaneously. If capacity exists anywhere, the script finds it and reserves it for you.
+**FindEC2Capacity_ODCR.ps1** automates the capacity hunt by creating [On-Demand Capacity Reservations](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-capacity-reservations.html) (ODCRs) across all supported AZs simultaneously. If capacity exists anywhere, the script finds it and reserves it for you - and provides the command to cancel the reservation if needed.  
 
 ### What It Does
 
@@ -21,17 +21,15 @@ When launching GPU, HPC, or other high-demand EC2 instance types, you often get 
 - **Creates ODCRs** wherever capacity is available
 - **Shows on-demand pricing** per hour for each successful reservation
 - **Lets you choose** which reservations to keep — automatically cancels the rest
-- **Accumulates capacity** over time for scarce instance types (TargetQuantity mode)
+- **Accumulates capacity** over time for scarce instance types (TargetQuantity mode) into an existing ODCR.
 
 ### Use Cases
 
 | Scenario | Mode |
 |----------|------|
-| Customer needs a specific GPU instance type (g6e, p5, etc.) but can't find capacity | Parallel (default) |
-| Need to quickly confirm if an instance type is available anywhere | Sequential (`-Sequential`) |
-| Customer needs 10+ instances and capacity is trickling in slowly | TargetQuantity (`-TargetQuantity`) |
-| Testing capacity availability before a planned migration | Parallel with `-RegionGroup us` |
-| Reserving capacity in a specific AZ for a multi-AZ deployment | Zone mode (`-Zone`) |
+| Need to quickly find a specific instance type (g6e, p5, etc.) in any region | Parallel (default) |
+| Customer needs 10 instances and capacity becomes available over time | TargetQuantity (`-TargetQuantity`) |
+| Reserving capacity in a specific AZ | Zone mode (`-Zone`) |
 
 ### Supported Platforms
 
