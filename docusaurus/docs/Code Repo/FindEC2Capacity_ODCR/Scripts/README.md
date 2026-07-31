@@ -6,13 +6,13 @@ slug: /Code Repo/FindEC2Capacity_ODCR/documentation
 
 # FindEC2Capacity_ODCR.ps1
 
-Creates an [On-Demand Capacity Reservation](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-capacity-reservations.html) (ODCR) for a specified EC2 instance type.
+Creates [On-Demand Capacity Reservations](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-capacity-reservations.html) (ODCR) for a specified EC2 instance type.
 
 You can then launch instances into the capacity reservation, stop or terminate, and launch new instances into the ODCR without losing the reserved capacity.
 
 > ⚠️ **Billing:** You are billed at the on-demand rate from the moment the ODCR is created, even if no instance is running in it. Cancel the ODCR when done.
 
-> ⚠️ **Scope is required:** In parallel mode (the default), the script attempts to create an ODCR in *every* AZ of the chosen scope at once. To avoid accidentally reserving capacity across all regions, you must specify `-Region`, `-Zone`, or `-RegionGroup` explicitly — there is no implicit default.
+> ⚠️ **Scope is required:** In parallel mode (the default), the script attempts to create an ODCR in *every* AZ of the chosen scope at once. To avoid accidentally reserving excessive capacity across all regions, you must specify `-Region`, `-Zone`, or `-RegionGroup` explicitly — there is no implicit default.
 
 ## Requirements
 
@@ -24,9 +24,14 @@ You can then launch instances into the capacity reservation, stop or terminate, 
 
 1. Open [CloudShell](https://docs.aws.amazon.com/cloudshell/latest/userguide/getting-started.html) in the AWS Console
 2. Launch PowerShell 7: `pwsh`
-3. [Upload](https://docs.aws.amazon.com/cloudshell/latest/userguide/getting-started.html#folder-upload) `FindEC2Capacity_ODCR.ps1` to CloudShell
-4. Run:
-```powershell
+3. Download the script into CloudShell:
+```pwsh
+Invoke-WebRequest `
+  -Uri "https://raw.githubusercontent.com/aws-samples/technical-notes-for-microsoft-workloads-on-aws/main/docusaurus/docs/Code%20Repo/FindEC2Capacity_ODCR/Scripts/FindEC2Capacity_ODCR.ps1" `
+  -OutFile FindEC2Capacity_ODCR.ps1
+```
+4. Run `.\FindEC2Capacity_ODCR.ps1` with the desired parameters. For example:
+```pwsh
 .\FindEC2Capacity_ODCR.ps1 -OS Windows -InstanceType g7e.2xlarge -RegionGroup us
 ```
 
