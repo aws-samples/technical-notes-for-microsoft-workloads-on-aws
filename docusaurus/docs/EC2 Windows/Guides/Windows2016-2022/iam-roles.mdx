@@ -1,0 +1,210 @@
+---
+title: IAM Roles Setup
+description: Create the IAM roles required by the Windows Server 2016 to 2022 in-place upgrade automation
+sidebar_position: 3
+---
+
+# IAM Role Setup
+
+The automation needs two IAM roles:
+
+1. **Automation Service Role** (`WindowsUpgradeAutomationRole`) — assumed by SSM Automation to orchestrate the upgrade (EC2, SSM, IAM, SNS calls).
+2. **Instance Role** (`WindowsUpgradeInstanceRole`) — temporarily attached to instances without SSM permissions; the automation attaches it before the upgrade and removes it afterward.
+
+There are two ways to create them. **CloudFormation is the recommended path** for this guide.
+
+## Option A: CloudFormation (recommended)
+
+The provided template creates both roles plus the instance profile in one step. It contains IAM resources **only** — the SSM documents are deployed separately (see the note at the end of this page). Run the commands from the `ssm-documents/` directory that contains the template.
+
+**AWS CLI (macOS/Linux/CloudShell):**
+
+```bash
+cd path/to/Windows2016-2022/ssm-documents/
+
+aws cloudformation create-stack \
+    --stack-name Windows2016to2022Upgrade \
+    --template-body file://windows-2016-to-2022-roles-cfn.json \
+    --capabilities CAPABILITY_NAMED_IAM \
+    --no-cli-pager
+
+aws cloudformation wait stack-create-complete \
+    --stack-name Windows2016to2022Upgrade --no-cli-pager
+
+# Automation role ARN (pass as AutomationAssumeRole when starting the upgrade)
+aws cloudformation describe-stacks \
+    --stack-name Windows2016to2022Upgrade \
+    --query 'Stacks[0].Outputs[?OutputKey==`AutomationRoleArn`].OutputValue' \
+    --output text --no-cli-pager
+```
+
+**PowerShell (Windows):**
+
+```powershell
+cd path\to\Windows2016-2022\ssm-documents
+
+aws cloudformation create-stack `
+    --stack-name Windows2016to2022Upgrade `
+    --template-body file://windows-2016-to-2022-roles-cfn.json `
+    --capabilities CAPABILITY_NAMED_IAM `
+    --no-cli-pager
+
+aws cloudformation wait stack-create-complete `
+    --stack-name Windows2016to2022Upgrade --no-cli-pager
+
+# Automation role ARN (pass as AutomationAssumeRole when starting the upgrade)
+aws cloudformation describe-stacks `
+    --stack-name Windows2016to2022Upgrade `
+    --query 'Stacks[0].Outputs[?OutputKey==`AutomationRoleArn`].OutputValue' `
+    --output text --no-cli-pager
+```
+
+The template is small, so it deploys inline with `--template-body` and no S3 staging is needed.
+
+## Option B: Manual
+
+If you prefer not to use CloudFormation, create the roles by hand. Pick the shell that matches your workstation: **AWS CLI** (macOS, Linux, or CloudShell) or **PowerShell** (Windows). Both produce identical roles.
+
+### AWS CLI (macOS, Linux, CloudShell)
+
+#### 1. Automation Service Role
+
+- **Trust:** `ssm.amazonaws.com`
+- **Permissions:** EC2 (instances, volumes, images, snapshots, Replace Root Volume), SSM (commands, automation), IAM (instance profiles), SNS
+
+```bash
+ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text --no-cli-pager)
+
+# Create the role with its trust policy
+aws iam create-role \
+    --role-name WindowsUpgradeAutomationRole \
+    --assume-role-policy-document '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":"ssm.amazonaws.com"},"Action":"sts:AssumeRole"}]}' \
+    --no-cli-pager
+
+# Substitute your account ID into the scoped policy, then attach it
+sed "s/YOUR_ACCOUNT_ID/${ACCOUNT_ID}/g" \
+    windows-2016-to-2022-automation-policy.json > /tmp/windows-upgrade-automation-policy.json
+
+aws iam put-role-policy \
+    --role-name WindowsUpgradeAutomationRole \
+    --policy-name WindowsUpgradeAutomationPolicy \
+    --policy-document file:///tmp/windows-upgrade-automation-policy.json \
+    --no-cli-pager
+```
+
+#### 2. Instance Role
+
+- **Trust:** `ec2.amazonaws.com`
+- **Managed Policy:** `AmazonSSMManagedInstanceCore`
+
+```bash
+aws iam create-role \
+    --role-name WindowsUpgradeInstanceRole \
+    --assume-role-policy-document '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":"ec2.amazonaws.com"},"Action":"sts:AssumeRole"}]}' \
+    --no-cli-pager
+
+aws iam attach-role-policy \
+    --role-name WindowsUpgradeInstanceRole \
+    --policy-arn arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore \
+    --no-cli-pager
+
+aws iam create-instance-profile \
+    --instance-profile-name WindowsUpgradeInstanceProfile \
+    --no-cli-pager
+
+aws iam add-role-to-instance-profile \
+    --instance-profile-name WindowsUpgradeInstanceProfile \
+    --role-name WindowsUpgradeInstanceRole \
+    --no-cli-pager
+```
+
+### PowerShell (Windows)
+
+Replace `YOUR_ACCOUNT_ID` with your AWS account ID.
+
+#### 1. Automation Service Role
+
+- **Trust:** `ssm.amazonaws.com`
+- **Permissions:** EC2 (instances, volumes, images, snapshots, Replace Root Volume), SSM (commands, automation), IAM (instance profiles), SNS
+
+```powershell
+New-IAMRole `
+    -RoleName 'WindowsUpgradeAutomationRole' `
+    -AssumeRolePolicyDocument '{
+        "Version":"2012-10-17",
+        "Statement":[{
+            "Effect":"Allow",
+            "Principal":{"Service":"ssm.amazonaws.com"},
+            "Action":"sts:AssumeRole"
+        }]
+    }'
+
+$AccountId = (Get-STSCallerIdentity).Account
+$policy = (Get-Content windows-2016-to-2022-automation-policy.json -Raw).Replace('YOUR_ACCOUNT_ID', $AccountId)
+
+Write-IAMRolePolicy `
+    -RoleName 'WindowsUpgradeAutomationRole' `
+    -PolicyName 'WindowsUpgradeAutomationPolicy' `
+    -PolicyDocument $policy
+```
+
+#### 2. Instance Role
+
+- **Trust:** `ec2.amazonaws.com`
+- **Managed Policy:** `AmazonSSMManagedInstanceCore`
+
+```powershell
+New-IAMRole `
+    -RoleName 'WindowsUpgradeInstanceRole' `
+    -AssumeRolePolicyDocument '{
+        "Version":"2012-10-17",
+        "Statement":[{
+            "Effect":"Allow",
+            "Principal":{"Service":"ec2.amazonaws.com"},
+            "Action":"sts:AssumeRole"
+        }]
+    }'
+Register-IAMRolePolicy `
+    -RoleName 'WindowsUpgradeInstanceRole' `
+    -PolicyArn 'arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore'
+
+New-IAMInstanceProfile `
+    -InstanceProfileName 'WindowsUpgradeInstanceProfile'
+Add-IAMRoleToInstanceProfile `
+    -InstanceProfileName 'WindowsUpgradeInstanceProfile' `
+    -RoleName 'WindowsUpgradeInstanceRole'
+```
+
+:::note Deploy the SSM documents separately
+Whichever role option you choose, deploy the two SSM documents directly — they are **not** part of the CloudFormation template.
+
+**AWS CLI (macOS/Linux/CloudShell):**
+
+```bash
+aws ssm create-document \
+    --name 'Windows-2016-to-2022-PreCheck' \
+    --document-type 'Automation' --document-format 'JSON' \
+    --content file://windows-2016-to-2022-precheck.json --no-cli-pager
+
+aws ssm create-document \
+    --name 'Windows-2016-to-2022-Upgrade' \
+    --document-type 'Automation' --document-format 'JSON' \
+    --content file://Windows-2016-to-2022-Upgrade.json --no-cli-pager
+```
+
+**PowerShell (Windows):**
+
+```powershell
+aws ssm create-document `
+    --name 'Windows-2016-to-2022-PreCheck' `
+    --document-type 'Automation' --document-format 'JSON' `
+    --content file://windows-2016-to-2022-precheck.json --no-cli-pager
+
+aws ssm create-document `
+    --name 'Windows-2016-to-2022-Upgrade' `
+    --document-type 'Automation' --document-format 'JSON' `
+    --content file://Windows-2016-to-2022-Upgrade.json --no-cli-pager
+```
+
+The documents cannot be embedded in the CloudFormation template: CloudFormation re-serializes the inline SSM `Content`, which pushes the upgrade document past the 64 KiB document limit. Document names are case-sensitive.
+:::
