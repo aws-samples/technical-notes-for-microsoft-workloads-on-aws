@@ -32,7 +32,7 @@ The automation handles:
 ## Prerequisites
 
 - Windows Server 2016 EC2 instance
-- License-included Windows (BYOL / Bring Your Own License instances are not supported)
+- License-included Windows (Bring Your Own License instances (BYOL) are not supported)
 - SSM Agent installed and running
 - Xen PV or ENA networking (SR-IOV/Intel 82599 not supported). If using a 4th-generation instance (m4, c4, etc.) with the Intel 82599 ENI, [migrate to a current-generation instance type](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/migrating-latest-types.html) (m5, c5, or newer) before running this automation.
 - SSM connectivity — internet or SSM VPC endpoints — so the automation can manage the instance
@@ -59,12 +59,21 @@ The automation requires two IAM roles. See **[IAM Roles Setup](./iam-roles)** fo
 
 ### 2. Deploy SSM Automation Documents
 
+[Open AWS CloudShell](https://console.aws.amazon.com/cloudshell/home)
+
+Run `pwsh`
+
 Download the SSM documents:
-- [Windows-2016-to-2019-Upgrade.json](https://github.com/aws-samples/technical-notes-for-microsoft-workloads-on-aws/blob/main/docusaurus/docs/EC2%20Windows/Guides/Windows2016-2019/ssm-documents/Windows-2016-to-2019-Upgrade.json)
-- [windows-2016-to-2019-precheck.json](https://github.com/aws-samples/technical-notes-for-microsoft-workloads-on-aws/blob/main/docusaurus/docs/EC2%20Windows/Guides/Windows2016-2019/ssm-documents/windows-2016-to-2019-precheck.json)
+```powershell
+Invoke-WebRequest `
+    -Uri "https://raw.githubusercontent.com/aws-samples/technical-notes-for-microsoft-workloads-on-aws/main/docusaurus/docs/EC2%20Windows/Guides/Windows2016-2019/ssm-documents/Windows-2016-to-2019-Upgrade.json" `
+    -OutFile 'Windows-2016-to-2019-Upgrade.json'
+Invoke-WebRequest `
+    -Uri "https://raw.githubusercontent.com/aws-samples/technical-notes-for-microsoft-workloads-on-aws/main/docusaurus/docs/EC2%20Windows/Guides/Windows2016-2019/ssm-documents/windows-2016-to-2019-precheck.json" `
+    -OutFile 'windows-2016-to-2019-precheck.json'
+```
 
-Upload to CloudShell and run:
-
+Create the SSM Automation Documents:
 ```powershell
 New-SSMDocument -Name 'Windows-2016-to-2019-PreCheck' `
     -DocumentType 'Automation' -DocumentFormat 'JSON' `
@@ -75,9 +84,17 @@ New-SSMDocument -Name 'Windows-2016-to-2019-Upgrade' `
     -Content (Get-Content -Raw Windows-2016-to-2019-Upgrade.json)
 ```
 
+Alternatively - download to your computer:
+
+- [Windows-2016-to-2019-Upgrade.json](https://github.com/aws-samples/technical-notes-for-microsoft-workloads-on-aws/blob/main/docusaurus/docs/EC2%20Windows/Guides/Windows2016-2019/ssm-documents/Windows-2016-to-2019-Upgrade.json)
+- [windows-2016-to-2019-precheck.json](https://github.com/aws-samples/technical-notes-for-microsoft-workloads-on-aws/blob/main/docusaurus/docs/EC2%20Windows/Guides/Windows2016-2019/ssm-documents/windows-2016-to-2019-precheck.json)
+
+
 See the [SSM Automation User Guide](https://docs.aws.amazon.com/systems-manager/latest/userguide/systems-manager-automation.html) for more on creating and managing automation documents.
 
 ## Run PreCheck or Start Upgrade
+
+### From AWS CloudShell
 
 ```powershell
 # Run from CloudShell (region auto-detected)
@@ -90,7 +107,7 @@ Start-SSMAutomationExecution -DocumentName 'Windows-2016-to-2019-Upgrade' -Param
 }
 ```
 
-### From the Systems Manager Console
+### (Alternatively) From the Systems Manager Console
 
 You can also run it from the web console instead of CloudShell:
 
