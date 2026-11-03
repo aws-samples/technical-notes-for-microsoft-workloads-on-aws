@@ -66,6 +66,17 @@ const FeatureList = [
     link: '/EC2 Windows/Guides/',
   },
   {
+    scale: 0.7,
+    title: 'On-Prem',
+    Svg: require('@site/static/img/tools.svg').default,
+    description: (
+      <>
+        Manage and upgrade on-premises Windows Server (VMware, Hyper-V or physical) with AWS Systems Manager hybrid activations.
+      </>
+    ),
+    link: '/On-Prem/Guides/',
+  },
+  {
     scale: 0.6,
     title: 'Licensing',
     Svg: require('@site/static/img/Arch_AWS-License-Manager_64.svg').default,

@@ -1,0 +1,376 @@
+---
+# SSM Automation Document - Windows Server In-Place Upgrade (On-Premises / VMware)
+#
+# Upgrades Windows Server on an on-premises SSM-managed instance using
+# installation media already present on the local disk.
+#
+# Supports: 2016 -> 2019, 2022, or 2025 (direct jump)
+#
+# ============================================================================
+# DISCLAIMER
+# ============================================================================
+# This document is provided as sample code, "AS IS", without warranty of any
+# kind. An in-place OS upgrade is a disruptive operation that cannot be
+# rolled back by this document.
+#
+# It is YOUR responsibility, before any execution, to:
+#   - Test this document thoroughly in a non-production environment that is
+#     representative of your target servers and workloads.
+#   - Ensure verified, restorable backups are in place for every target
+#     server (e.g. VM snapshot and/or full system backup) and that you have
+#     a tested rollback plan.
+#   - Confirm application compatibility and licensing for the target Windows
+#     Server version and edition.
+#
+# You are solely responsible for any impact resulting from its use.
+#
+# This project is licensed under the Apache-2.0 and CC-BY-SA-4.0 Licenses.
+# See the LICENSE file(s) in the root of this project for details.
+# ============================================================================
+#
+# ============================================================================
+# IMPORTANT - THIS UPGRADE BREAKS THE SSM AGENT
+# ============================================================================
+# A Windows Server feature (in-place) upgrade replaces the OS servicing stack
+# and does NOT reliably carry the AWS SSM Agent registration through the
+# upgrade reboot. After the reboot the on-prem/hybrid instance typically stops
+# reporting to SSM (PingStatus never returns to Online, and runCommand can no
+# longer reach it).
+#
+# Because of that, this document does NOT attempt any post-reboot SSM action.
+# There is no "wait for Online" and no post-upgrade "verify" runCommand step -
+# those cannot work once the agent is gone, so they have been removed.
+#
+# Instead, everything that can be verified is done while SSM is still healthy
+# (pre-reboot). Just before the reboot, Step 2 writes a self-contained
+# completion log to the local disk:
+#
+#     C:\WindowsUpgrade_preupgrade.log
+#
+# That file is the source of truth that "the upgrade was started". Step 2 then
+# schedules a delayed reboot (shutdown.exe /r /t 60) and exits 0, so the SSM
+# command reports Success BEFORE the box goes down and the automation
+# completes cleanly. Actual upgrade SUCCESS must be verified out-of-band (VMware console,
+# RDP, or by re-registering the machine with SSM after it comes back) - not
+# through this document.
+# ============================================================================
+#
+# Prerequisites:
+#   - Instance registered with SSM (hybrid activation mi-* or EC2 i-*)
+#   - Windows Server install media extracted to MediaPath (setup.exe at root)
+#   - Sufficient disk space (~20GB free on C:)
+#   - VMware Tools up to date (recommended before OS upgrade)
+#
+# Security notes:
+#   - Free-text parameters are constrained with allowedPattern and placed in
+#     single-quoted PowerShell strings to prevent command injection.
+#   - setup.exe only runs if it carries a valid Microsoft Authenticode signature.
+#   - The product key is masked in logs and command output. A key supplied in
+#     ProductKey is still visible in the Automation execution history.
+# Step order:
+#   1. Validate instance and media (SSM healthy)
+#   2. Launch the upgrade, write the pre-upgrade completion log, then
+#      schedule a delayed reboot and exit (the last action SSM performs)
+
+description: >-
+  In-place upgrade of Windows Server on an on-premises SSM-managed instance
+  (VMware, Hyper-V, or physical). Uses local installation media. NOTE: this
+  upgrade breaks the SSM Agent, so the document performs no post-reboot SSM
+  actions - it records that the upgrade was STARTED (via
+  C:\WindowsUpgrade_preupgrade.log) and then reboots. Success must be verified
+  out-of-band. DISCLAIMER: sample code provided AS IS - you are responsible for
+  testing it and having verified backups in place before any execution.
+  Licensed under Apache-2.0 and CC-BY-SA-4.0.
+
+schemaVersion: "0.3"
+
+assumeRole: "{{ AutomationAssumeRole }}"
+
+parameters:
+  InstanceId:
+    type: String
+    description: "SSM managed instance ID (i-xxx for EC2, mi-xxx for on-prem hybrid)"
+    allowedPattern: '^(i-[0-9a-f]{8}|i-[0-9a-f]{17}|mi-[0-9a-f]{17})$'
+  TargetWindowsVersion:
+    type: String
+    description: "Target Windows Server version"
+    allowedValues:
+      - "2016"
+      - "2019"
+      - "2022"
+      - "2025"
+  MediaPath:
+    type: String
+    description: >-
+      Local path to Windows Server install media (folder containing setup.exe).
+      Letters, digits, spaces and _ . ( ) - \ only.
+    default: "C:\\Source"
+    allowedPattern: '^[A-Za-z]:\\[A-Za-z0-9 _.()\\-]{0,200}$'
+  ImageIndex:
+    type: String
+    description: "WIM image index: 1=Standard Core, 2=Standard Desktop, 3=Datacenter Core, 4=Datacenter Desktop"
+    default: "2"
+    allowedValues:
+      - "1"
+      - "2"
+      - "3"
+      - "4"
+  ProductKey:
+    type: String
+    description: >-
+      Optional product key passed to setup as /pkey. Leave blank to use the
+      Microsoft public KMS client setup key (GVLK) matching
+      TargetWindowsVersion and ImageIndex (Standard for 1/2, Datacenter for
+      3/4). A key is REQUIRED for the upgrade to run unattended - without one,
+      Windows Setup stops on the product-key page and hangs (0% CPU) in the
+      non-interactive SSM/SYSTEM context. Supply your own MAK/retail key if
+      you do not activate via KMS.
+    default: ""
+    allowedPattern: "^$|^([A-Z0-9]{5}-){4}[A-Z0-9]{5}$"
+  AutomationAssumeRole:
+    type: String
+    description: "IAM role ARN for the automation to assume (optional)"
+    default: ""
+    allowedPattern: '^$|^arn:aws[a-z-]*:iam::\d{12}:role/[\w+=,.@/-]{1,512}$'
+
+mainSteps:
+
+  # ============================================================
+  # Step 1: Validate instance and media
+  # (runs while SSM is healthy)
+  # ============================================================
+  - name: validateInstance
+    action: aws:runCommand
+    onFailure: Abort
+    timeoutSeconds: 120
+    inputs:
+      DocumentName: AWS-RunPowerShellScript
+      InstanceIds:
+        - "{{ InstanceId }}"
+      Parameters:
+        commands:
+          - |
+            $ErrorActionPreference = "Stop"
+            $logFile = "C:\WindowsUpgrade.log"
+            $mediaPath = '{{ MediaPath }}'
+            $targetVersion = '{{ TargetWindowsVersion }}'
+
+            function Write-Log($msg) {
+                $line = "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') - $msg"
+                Add-Content -Path $logFile -Value $line
+                Write-Host $line
+            }
+
+            Write-Log "=== Windows Server Upgrade Validation ==="
+            Write-Log "Target: Windows Server $targetVersion"
+            Write-Log "Media:  $mediaPath"
+
+            # Check media exists
+            if (-not (Test-Path "$mediaPath\setup.exe")) {
+                Write-Log "ERROR: setup.exe not found at $mediaPath"
+                exit 1
+            }
+            Write-Log "Media found: $mediaPath\setup.exe"
+
+            # Check setup.exe is Microsoft-signed (it runs as SYSTEM)
+            $sig = Get-AuthenticodeSignature -FilePath (Join-Path $mediaPath "setup.exe")
+            if ($sig.Status -ne "Valid" -or $sig.SignerCertificate.Subject -notmatch "O=Microsoft Corporation") {
+                Write-Log "ERROR: setup.exe does not have a valid Microsoft signature (status: $($sig.Status))"
+                exit 1
+            }
+            Write-Log "setup.exe signature valid: $($sig.SignerCertificate.Subject)"
+
+            # Check current OS
+            $osInfo = Get-WmiObject -Class Win32_OperatingSystem
+            if ($osInfo.ProductType -ne 3) {
+                Write-Log "ERROR: Not a Windows Server OS"
+                exit 1
+            }
+            Write-Log "Current OS: $($osInfo.Caption) (Build $($osInfo.BuildNumber))"
+
+            # Check disk space (need ~20GB free on C:)
+            $cDrive = Get-WmiObject -Class Win32_LogicalDisk -Filter "DeviceID='C:'"
+            $freeGB = [math]::Round($cDrive.FreeSpace / 1GB, 1)
+            Write-Log "Free space on C: ${freeGB}GB"
+            if ($freeGB -lt 20) {
+                Write-Log "ERROR: Insufficient disk space. Need at least 20GB free, have ${freeGB}GB"
+                exit 1
+            }
+
+            # Check VMware Tools status (informational)
+            $vmtools = Get-Service -Name "VMTools" -ErrorAction SilentlyContinue
+            if ($vmtools) {
+                Write-Log "VMware Tools: $($vmtools.Status)"
+            } else {
+                Write-Log "VMware Tools: not detected (not VMware or tools not installed)"
+            }
+
+            Write-Log "Validation PASSED"
+            Write-Host "Current: $($osInfo.Caption) | Free: ${freeGB}GB | Target: Server $targetVersion"
+
+  # ============================================================
+  # Step 2: Launch the in-place upgrade and reboot.
+  #
+  # This is the LAST action SSM can perform on this box. The feature
+  # upgrade breaks the SSM Agent, so there is no post-reboot step.
+  #
+  # Order matters:
+  #   1. Launch setup.exe /auto upgrade /noreboot (so we control the reboot)
+  #   2. If setup launched OK, write C:\WindowsUpgrade_preupgrade.log - the
+  #      source-of-truth record that the upgrade was STARTED. It is written
+  #      BEFORE the reboot so it survives even though SSM will not.
+  #   3. Schedule a delayed reboot (shutdown.exe /r /t 60) and exit 0. The
+  #      delay lets the script exit and the SSM Agent report the command
+  #      result before the reboot. (Calling Restart-Computer inline would kill
+  #      the session before the result is sent, leaving the step In Progress
+  #      until it times out, because the agent does not return post-upgrade.)
+  #
+  # We do NOT bother forcing the SSM Agent to Automatic for "post-reboot
+  # recovery" any more, because the agent registration does not survive the
+  # feature upgrade regardless. Recovery / verification is out-of-band.
+  # ============================================================
+  - name: runWindowsUpgrade
+    action: aws:runCommand
+    onFailure: Abort
+    timeoutSeconds: 7200
+    inputs:
+      DocumentName: AWS-RunPowerShellScript
+      InstanceIds:
+        - "{{ InstanceId }}"
+      Parameters:
+        # AWS-RunPowerShellScript has its own executionTimeout (default 3600s)
+        # which is independent of the step's timeoutSeconds - match them.
+        executionTimeout:
+          - "7200"
+        commands:
+          - |
+            $ErrorActionPreference = "Stop"
+            $logFile = "C:\WindowsUpgrade.log"
+            $preUpgradeLog = "C:\WindowsUpgrade_preupgrade.log"
+            $mediaPath = '{{ MediaPath }}'
+            $targetVersion = '{{ TargetWindowsVersion }}'
+            $imageIndex = '{{ ImageIndex }}'
+            $productKey = '{{ ProductKey }}'
+
+            function Write-Log($msg) {
+                $line = "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') - $msg"
+                Add-Content -Path $logFile -Value $line
+                Write-Host $line
+            }
+
+            Write-Log "=== Starting Windows Server $targetVersion In-Place Upgrade ==="
+
+            $setupExe = "$mediaPath\setup.exe"
+
+            # Re-check the signature immediately before running setup as SYSTEM
+            if (-not (Test-Path -LiteralPath $setupExe -PathType Leaf)) {
+                Write-Log "ERROR: setup.exe not found at $setupExe"
+                exit 1
+            }
+            $sig = Get-AuthenticodeSignature -FilePath $setupExe
+            if ($sig.Status -ne "Valid" -or $sig.SignerCertificate.Subject -notmatch "O=Microsoft Corporation") {
+                Write-Log "ERROR: $setupExe does not have a valid Microsoft signature (status: $($sig.Status))"
+                exit 1
+            }
+
+            # Capture the pre-upgrade OS build so the completion log records
+            # where we came from.
+            $osInfo = Get-WmiObject -Class Win32_OperatingSystem
+            $sourceCaption = $osInfo.Caption
+            $sourceBuild = $osInfo.BuildNumber
+            Write-Log "Source OS: $sourceCaption (Build $sourceBuild)"
+
+            # Build setup arguments
+            # /auto upgrade       - unattended in-place upgrade
+            # /imageindex N       - which edition from the WIM
+            # /compat ignorewarning - skip non-blocking compat warnings
+            # /showoobe none      - skip OOBE screens
+            # /DynamicUpdate Disable - don't download updates during setup
+            # /eula accept        - accept EULA
+            # /noreboot           - don't reboot automatically (we control the reboot)
+            $setupArgs = "/auto upgrade /imageindex $imageIndex /compat ignorewarning /showoobe none /DynamicUpdate Disable /noreboot /eula accept"
+
+            # Product key. REQUIRED for an unattended upgrade - without it setup
+            # stops on the product-key page and hangs at 0% CPU. If none was
+            # supplied, use Microsoft's public KMS client setup key (GVLK) for
+            # the target version + edition (ImageIndex 1/2 = Standard, 3/4 = Datacenter).
+            # Source: https://learn.microsoft.com/windows-server/get-started/kms-client-activation-keys
+            $gvlks = @{
+                "2016" = @{ Standard = "WC2BQ-8NRM3-FDDYY-2BFGV-KHKQY"; Datacenter = "CB7KF-BWN84-R7R2Y-793K2-8XDDG" }
+                "2019" = @{ Standard = "N69G4-B89J2-4G8F4-WWYCC-J464C"; Datacenter = "WMDGN-G9PQG-XVVXX-R3X43-63DFG" }
+                "2022" = @{ Standard = "VDYBN-27WPP-V4HQT-9VMD4-VMK7H"; Datacenter = "WX4NM-KYWYW-QJJR4-XV3QB-6VM33" }
+                "2025" = @{ Standard = "TVRH6-WHNXV-R9WG3-9XRFY-MY832"; Datacenter = "D764K-2NDRG-47T6Q-P8T8W-YP6DF" }
+            }
+            $edition = if ([int]$imageIndex -le 2) { "Standard" } else { "Datacenter" }
+            if ($productKey.Trim() -eq '') {
+                $productKey = $gvlks[$targetVersion][$edition]
+                Write-Log "No product key supplied - using KMS client setup key for Server $targetVersion $edition"
+            } else {
+                Write-Log "Using supplied product key"
+            }
+            $setupArgs += " /pkey $productKey"
+
+            # Mask the product key in logs and command output
+            $maskedArgs = $setupArgs -replace '/pkey (\S{5}-){4}(\S{5})', '/pkey XXXXX-XXXXX-XXXXX-XXXXX-$2'
+            Write-Log "Running: $setupExe $maskedArgs"
+            $process = Start-Process -FilePath $setupExe -ArgumentList $setupArgs -Wait -PassThru -NoNewWindow
+            Write-Log "Setup exit code: $($process.ExitCode)"
+
+            if ($process.ExitCode -eq 0 -or $process.ExitCode -eq 3010 -or $process.ExitCode -eq 1641) {
+                Write-Log "Windows upgrade STARTED successfully (setup exit code $($process.ExitCode))"
+
+                # ----------------------------------------------------------------
+                # Write the pre-upgrade completion log. This is the source of
+                # truth that "the upgrade was started" and is the LAST thing SSM
+                # can record before the agent is broken by the reboot.
+                # ----------------------------------------------------------------
+                $preUpgradeContent = @(
+                    "UpgradeStarted=True"
+                    "StartedAt=$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
+                    "SourceOS=$sourceCaption"
+                    "SourceBuild=$sourceBuild"
+                    "TargetVersion=$targetVersion"
+                    "SetupExitCode=$($process.ExitCode)"
+                    "MediaPath=$mediaPath"
+                    "ImageIndex=$imageIndex"
+                    "Note=SSM Agent will be broken by the feature upgrade reboot. No post-reboot SSM verification is performed. Verify success out-of-band."
+                )
+                # Set-Content closes the file handle on return, so the log is
+                # on disk before the reboot is scheduled.
+                Set-Content -Path $preUpgradeLog -Value $preUpgradeContent -Force
+                Write-Log "Wrote pre-upgrade completion log: $preUpgradeLog"
+                Get-Content $preUpgradeLog | ForEach-Object { Write-Log "  $_" }
+
+                # Informational markers in the command output (visible in the
+                # Run Command / Automation step output).
+                Write-Host "UPGRADE_STARTED=TRUE"
+                Write-Host "PREUPGRADE_LOG=$preUpgradeLog"
+
+                # Schedule the reboot rather than rebooting inline, so this
+                # script can exit and the SSM Agent can report Success first.
+                Write-Log "Scheduling reboot in 60s to finalise the upgrade. This is the last SSM-visible action."
+                & shutdown.exe /r /t 60 /d p:2:3 /c "Windows Server in-place upgrade to $targetVersion (SSM Automation)"
+                if ($LASTEXITCODE -ne 0) {
+                    Write-Log "ERROR: failed to schedule reboot (shutdown.exe exit code $LASTEXITCODE). Upgrade is staged - reboot manually to finalise."
+                    exit 1
+                }
+                exit 0
+            } else {
+                Write-Log "ERROR: Windows upgrade failed to start (setup exit code $($process.ExitCode))"
+
+                # Check for setup error logs
+                $pantherLog = "C:\`$WINDOWS.~BT\Sources\Panther\setuperr.log"
+                if (Test-Path $pantherLog) {
+                    Write-Log "--- Setup Error Log (last 30 lines) ---"
+                    Get-Content $pantherLog | Select-Object -Last 30 | ForEach-Object { Write-Log $_ }
+                }
+
+                # Check compat scan results
+                $compatLog = "C:\`$WINDOWS.~BT\Sources\Panther\CompatData*.xml"
+                $compatFiles = Get-ChildItem $compatLog -ErrorAction SilentlyContinue
+                if ($compatFiles) {
+                    Write-Log "Compat data files found: $($compatFiles.Name -join ', ')"
+                }
+
+                exit 1
+            }
