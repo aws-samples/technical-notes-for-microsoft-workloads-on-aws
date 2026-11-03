@@ -32,9 +32,9 @@ The automation handles:
 ## Prerequisites
 
 - Windows Server 2016 EC2 instance
-- License-included Windows (Bring Your Own License instances (BYOL) are not supported)
+- License-included Windows (Does not support Bring Your Own License (BYOL) Instances)
 - SSM Agent installed and running
-- Xen PV or ENA networking (SR-IOV/Intel 82599 not supported). If using a 4th-generation instance (m4, c4, etc.) with the Intel 82599 ENI, [migrate to a current-generation instance type](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/migrating-latest-types.html) (m5, c5, or newer) before running this automation.
+- Xen PV or ENA networking (Does not support SR-IOV/Intel 82599). If using a 4th-generation instance (m4, c4, etc.) with the Intel 82599 ENI, [migrate to a current-generation instance type](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/migrating-latest-types.html) (m5, c5, or newer) before running this automation.
 - SSM connectivity — internet or SSM VPC endpoints — so the automation can manage the instance
 - **Outbound internet (HTTPS 443) to the Microsoft Update Catalog CDN** if cumulative-update patching is enabled (the default). The pinned CUs download directly from Microsoft; SSM VPC endpoints alone are not sufficient. If the instance has no internet egress, set `InstallCumulativeUpdates=false` and apply patches with your own process.
 - C: drive must be the last partition if disk expansion is needed
@@ -43,7 +43,7 @@ The automation handles:
 
 The instance reboots several times and is unavailable for the duration (similar to a larger-than-usual patch window). **Treat this like routine OS patching (monthly cumulative updates): use whatever process you already run before patching that instance** to stop it from serving traffic and to protect your application — for example, draining and deregistering it from the load balancer / target group, pausing health checks, enabling maintenance mode, quiescing the application or services, or scheduling a maintenance window. The automation does not modify your application, load balancer, or DNS; managing traffic and application state before and after is the owner's responsibility, just as it is for normal patching.
 
-The instance is only **rebooted**, never stopped/started (this holds for the rollback path too, which uses [Replace Root Volume](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/replace-root.html) in place). So **instance-store volumes and an auto-assigned (dynamic) public IP are preserved** across the upgrade.
+The instance is only **rebooted**, not stopped/started (this holds for the rollback path too, which uses [Replace Root Volume](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/replace-root.html) in place). So **instance-store volumes and an auto-assigned (dynamic) public IP are preserved** across the upgrade. 
 
 ### Supported Languages
 
@@ -59,9 +59,8 @@ The automation requires two IAM roles. See **[IAM Roles Setup](./iam-roles)** fo
 
 ### 2. Deploy SSM Automation Documents
 
-[Open AWS CloudShell](https://console.aws.amazon.com/cloudshell/home)
-
-Run `pwsh`
+* Open [AWS CloudShell](https://console.aws.amazon.com/cloudshell/home)
+* Run `pwsh`
 
 Download the SSM documents:
 ```powershell
@@ -96,6 +95,8 @@ See the [SSM Automation User Guide](https://docs.aws.amazon.com/systems-manager/
 
 ### From AWS CloudShell
 
+Replace `i-0123456789abcdef0` and `AccountID`
+
 ```powershell
 # Run from CloudShell (region auto-detected)
 $AccountId = (Get-STSCallerIdentity).Account
@@ -111,9 +112,9 @@ Start-SSMAutomationExecution -DocumentName 'Windows-2016-to-2019-Upgrade' -Param
 
 You can also run it from the web console instead of CloudShell:
 
-1. Open the [Systems Manager Automation console](https://console.aws.amazon.com/systems-manager/automation/execute/) (top-right region selector must be the instance's region).
-2. Choose **Execute automation**.
-3. Under **Choose document**, open the **Owned by me** tab and select `Windows-2016-to-2019-Upgrade` (or `Windows-2016-to-2019-PreCheck`), then **Next**.
+1. Open the [Systems Manager Automation console](https://console.aws.amazon.com/systems-manager/automation/) (top-right region selector must be the instance's region).
+2. Choose **Execute runbook**.
+3. Under **Choose runbook**, select the **Owned by me** tab and select `Windows-2016-to-2019-Upgrade`, then **Next**.
 4. Leave **Simple execution** selected and fill in the parameters — at minimum `InstanceId` and `AutomationAssumeRole` (set `DryRun = true` for pre-flight checks only).
 5. Choose **Execute**, then watch step-by-step progress on the execution detail page.
 
@@ -137,6 +138,11 @@ You can also run it from the web console instead of CloudShell:
 
 ### List All Running Upgrades
 
+#### From [CloudShell](https://console.aws.amazon.com/cloudshell/home)
+
+Run 'pwsh' 
+Paste the following command:
+
 ```powershell
 Get-SSMAutomationExecutionList -Filter @{
     Key='DocumentNamePrefix';Values='Windows-2016-to-2019-Upgrade'
@@ -157,14 +163,24 @@ Get-SSMAutomationExecutionList -Filter @{
   } | Format-Table
 ```
 
-### View Step-by-Step Progress
+Copy an `ExecutionId` and set the $ExecId variable:
 
 ```powershell
 $ExecId = 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'
+```
+
+Check the Status of an individual upgrade: 
+```powershell
 (Get-SSMAutomationExecution -AutomationExecutionId $ExecId).StepExecutions |
     Where-Object { $_.StepStatus -ne 'Pending' } |
     Select-Object StepName, StepStatus | Format-Table -AutoSize
 ```
+
+
+#### From the Systems Manager Console:  
+Open the list of [Automation executions](https://console.aws.amazon.com/systems-manager/automation/executions)
+
+Click the Execution ID to see the Executed Steps.  (may need to click through the pages `< 1 2 3 4 5 6 7 >`)
 
 ## Automation Steps
 
