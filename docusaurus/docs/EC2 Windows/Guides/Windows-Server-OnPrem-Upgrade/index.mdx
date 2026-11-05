@@ -1,0 +1,136 @@
+---
+title: Windows Server On-Premises In-Place Upgrade
+description: SSM Automation document for upgrading on-premises Windows Server 2016 to 2019, 2022 or 2025 using local installation media
+sidebar_position: 1
+---
+# Windows Server On-Premises In-Place Upgrade
+An AWS Systems Manager (SSM) Automation document that performs an in-place upgrade of Windows Server on an on-premises machine (VMware, Hyper-V or physical) that is registered with SSM through a [hybrid activation](https://docs.aws.amazon.com/systems-manager/latest/userguide/activations.html). The upgrade uses installation media that is already extracted on the server's local disk.
+
+> **Note:** This is sample code, for non-production usage. You should work with your security and legal teams to meet your organizational security, regulatory and compliance requirements before deployment.
+
+:::danger An in-place upgrade cannot be rolled back by this document
+Test in a non-production environment that is representative of your workloads. Before you run it against any server, make sure you have a verified, restorable backup (for example a VM snapshot and/or a full system backup) and a tested rollback plan. Confirm application compatibility and licensing for the target Windows Server version and edition.
+:::
+
+## Why Upgrade?
+**Windows Server 2016 reaches end of support on January 14, 2027.** After that date Microsoft no longer provides free security patches, and continued coverage requires [Extended Security Updates (ESU)](https://learn.microsoft.com/en-us/windows-server/get-started/extended-security-updates-overview). Upgrading in place to a supported release avoids that cost.
+
+## When to Use This
+Building new servers and redeploying the application is the preferred approach (see Microsoft's [upgrade overview](https://learn.microsoft.com/en-us/windows-server/get-started/upgrade-overview)). Use an in-place upgrade when rebuilding isn't practical, for example legacy applications with deep OS-level dependencies, or fleets where the cost and risk of rebuilding exceeds an upgrade.
+
+## How It Works
+The document has two steps:
+
+1. **`validateInstance`**: runs while SSM is healthy. Confirms `setup.exe` exists in the media path and has a valid Microsoft signature, the machine is a Windows Server OS, and at least 20 GB is free on `C:`. VMware Tools status is logged for information.
+2. **`runWindowsUpgrade`**: starts `setup.exe /auto upgrade` with `/noreboot`, writes a completion record to `C:\WindowsUpgrade_preupgrade.log`, then schedules a reboot 60 seconds later with `shutdown.exe` and exits successfully.
+
+:::warning The upgrade breaks the SSM Agent
+A Windows Server feature upgrade does not reliably carry the SSM Agent registration through the upgrade reboot. After the reboot, the server typically stops reporting to SSM (`PingStatus` does not return to `Online`) and Run Command can no longer reach it.
+
+Because of this, the document performs **no post-reboot SSM actions**. A successful automation execution means **the upgrade was started**, not that it succeeded. You must verify the result out-of-band (see [Verify the Upgrade](#verify-the-upgrade)) and re-register the server with SSM afterwards if you need it managed.
+:::
+
+The reboot is scheduled rather than issued inline so the script can exit and the SSM Agent can report the step as `Success` before the server goes down.
+
+## What's Included
+| File | Description |
+|------|-------------|
+| [upgrade-windows-onprem.yaml](https://github.com/aws-samples/technical-notes-for-microsoft-workloads-on-aws/blob/main/docusaurus/docs/EC2%20Windows/Guides/Windows-Server-OnPrem-Upgrade/ssm-documents/upgrade-windows-onprem.yaml) | SSM Automation document |
+
+## Prerequisites
+- The server is registered with SSM as a managed instance (`mi-` ID) through a hybrid activation, and shows `Online` in Fleet Manager.
+- Windows Server installation media for the **target** version is extracted on the server's local disk with `setup.exe` at the root of the media path (default `C:\Source`).
+- At least 20 GB free on `C:`.
+- VMware Tools (or equivalent integration services) up to date. Recommended before an OS upgrade.
+- An AWS Identity and Access Management (IAM) role for SSM Automation to assume (see below).
+- A product key plan. See [Product key](#product-key).
+
+## Create the Automation Role
+SSM Automation assumes a role to run the commands on your behalf. Create a role that trusts the SSM service:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": { "Service": "ssm.amazonaws.com" },
+      "Action": "sts:AssumeRole"
+    }
+  ]
+}
+```
+
+Attach the AWS managed policy `AmazonSSMAutomationRole`, or a policy scoped down to your own needs. At minimum the role needs permission to call `ssm:SendCommand`, `ssm:GetCommandInvocation` and `ssm:ListCommandInvocations` against the target managed instance and the `AWS-RunPowerShellScript` document. Review the permissions against your organization's least-privilege requirements.
+
+```bash
+aws iam create-role \
+    --role-name OnPremUpgradeAutomationRole \
+    --assume-role-policy-document file://trust-policy.json \
+    --no-cli-pager
+
+aws iam attach-role-policy \
+    --role-name OnPremUpgradeAutomationRole \
+    --policy-arn arn:aws:iam::aws:policy/service-role/AmazonSSMAutomationRole \
+    --no-cli-pager
+```
+
+## Deploy the Document
+Run from the folder containing the YAML file:
+
+```bash
+aws ssm create-document \
+    --name OnPrem-Windows-Server-InPlace-Upgrade \
+    --document-type Automation \
+    --document-format YAML \
+    --content file://upgrade-windows-onprem.yaml \
+    --region your-region \
+    --no-cli-pager
+```
+
+## Run the Upgrade
+```bash
+aws ssm start-automation-execution \
+    --document-name OnPrem-Windows-Server-InPlace-Upgrade \
+    --parameters InstanceId=mi-0123456789abcdef0,TargetWindowsVersion=2022,AutomationAssumeRole=arn:aws:iam::111122223333:role/OnPremUpgradeAutomationRole \
+    --region your-region \
+    --no-cli-pager
+```
+
+Replace the instance ID, account ID and region with your own values.
+
+### Parameters
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `InstanceId` | (required) | SSM managed instance ID (`mi-` for hybrid activations, `i-` for EC2) |
+| `TargetWindowsVersion` | (required) | `2016`, `2019`, `2022` or `2025` |
+| `MediaPath` | `C:\Source` | Local folder containing the target version's `setup.exe` |
+| `ImageIndex` | `2` | WIM image index: `1` Standard Core, `2` Standard Desktop, `3` Datacenter Core, `4` Datacenter Desktop. Must match the server's current edition and installation option |
+| `ProductKey` | blank | Optional product key. See below |
+| `AutomationAssumeRole` | blank | ARN of the role SSM Automation assumes |
+
+### Product key
+Without a product key, Windows Setup stops on the product-key page and hangs at 0% CPU, because SSM runs it in a non-interactive context. If `ProductKey` is blank, the document supplies Microsoft's [public KMS client setup key](https://learn.microsoft.com/en-us/windows-server/get-started/kms-client-activation-keys) for the target version and edition (Standard for image index 1 and 2, Datacenter for 3 and 4). That key allows setup to proceed and lets the server activate against a KMS host. If you do not activate through KMS, supply your own MAK or retail key in `ProductKey`.
+
+:::note
+The document masks the product key in its log and command output, but a key supplied in `ProductKey` is stored in plain text in the Automation execution history. Restrict who can view executions (`ssm:DescribeAutomationExecutions`, `ssm:GetAutomationExecution`) if you supply your own key.
+:::
+
+## Verify the Upgrade
+Because SSM cannot report on the server after the reboot, check it directly:
+
+1. Watch the server's console (for example the VMware console) while the upgrade completes. It can take a long time and reboots more than once.
+2. Sign in and confirm the version, for example with `winver` or:
+   ```powershell
+   (Get-CimInstance Win32_OperatingSystem) | Select-Object Caption, BuildNumber
+   ```
+   Expected build numbers: Server 2016 `14393`, 2019 `17763`, 2022 `20348`, 2025 `26100`.
+3. Review `C:\WindowsUpgrade_preupgrade.log` (the start record) and `C:\WindowsUpgrade.log` (the full log).
+4. Re-register the server with SSM if you need it managed again.
+
+## Troubleshooting
+- **Validation fails with "setup.exe not found":** check `MediaPath` and that the media is extracted, not an ISO.
+- **Validation fails with "does not have a valid Microsoft signature":** the media is incomplete, corrupted or not genuine. Re-extract it from a trusted source.
+- **Execution fails on a parameter value:** `MediaPath` only accepts letters, digits, spaces and `_ . ( ) - \`, to prevent command injection.
+- **Step 2 fails with a setup exit code:** the document logs the last lines of `C:\$WINDOWS.~BT\Sources\Panther\setuperr.log` and lists any compatibility data files. Review them for the blocking issue.
+- **Setup hangs with no CPU activity:** a product key was not accepted or not supplied. See [Product key](#product-key).
