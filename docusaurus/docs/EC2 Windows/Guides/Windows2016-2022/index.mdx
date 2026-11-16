@@ -12,7 +12,7 @@ Automated SSM Automation solution for upgrading EC2 instances directly from Wind
 
 ## Why Upgrade?
 
-**Windows Server 2016 reaches end of support on January 14, 2027.** After that date, Microsoft no longer provides free security patches for Windows Server 2016. Organizations that remain on 2016 must purchase [Extended Security Updates (ESU)](https://learn.microsoft.com/en-us/windows-server/get-started/extended-security-updates-overview), which carry significant per-instance annual costs.
+**Windows Server 2016 reaches end of support on January 13, 2027.** After that date, Microsoft no longer provides free security patches for Windows Server 2016. Organizations that remain on 2016 must purchase [Extended Security Updates (ESU)](https://learn.microsoft.com/en-us/windows-server/get-started/extended-security-updates-overview), which carry significant per-instance annual costs.
 
 | Year | ESU Cost (per 2-vCPU core pack) |
 |------|------|
@@ -37,7 +37,7 @@ The **preferred approach** for OS upgrades is to build new servers and redeploy 
 
 | File | Description |
 |------|-------------|
-| [Windows-2016-to-2022-Upgrade.json](https://github.com/aws-samples/technical-notes-for-microsoft-workloads-on-aws/blob/main/docusaurus/docs/EC2%20Windows/Guides/Windows2016-2022/ssm-documents/Windows-2016-to-2022-Upgrade.json) | Main SSM Automation document — performs the full upgrade (76 steps, 8-cycle verify chain) |
+| [Windows-2016-to-2022-Upgrade.json](https://github.com/aws-samples/technical-notes-for-microsoft-workloads-on-aws/blob/main/docusaurus/docs/EC2%20Windows/Guides/Windows2016-2022/ssm-documents/Windows-2016-to-2022-Upgrade.json) | Main SSM Automation document — performs the full upgrade (79 steps, 8-cycle verify chain) |
 | [windows-2016-to-2022-precheck.json](https://github.com/aws-samples/technical-notes-for-microsoft-workloads-on-aws/blob/main/docusaurus/docs/EC2%20Windows/Guides/Windows2016-2022/ssm-documents/windows-2016-to-2022-precheck.json) | Pre-flight check document — validates readiness without making changes |
 | [windows-2016-to-2022-roles-cfn.json](https://github.com/aws-samples/technical-notes-for-microsoft-workloads-on-aws/blob/main/docusaurus/docs/EC2%20Windows/Guides/Windows2016-2022/ssm-documents/windows-2016-to-2022-roles-cfn.json) | CloudFormation template — deploys the two IAM roles + instance profile |
 | [IAM Roles](./iam-roles) | IAM role and policy setup instructions |

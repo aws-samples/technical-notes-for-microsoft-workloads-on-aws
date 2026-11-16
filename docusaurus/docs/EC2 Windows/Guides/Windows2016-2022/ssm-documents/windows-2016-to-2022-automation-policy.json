@@ -38,6 +38,19 @@
       }
     },
     {
+      "Sid": "EC2ReplaceRootVolumeResources",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:CreateReplaceRootVolumeTask"
+      ],
+      "Resource": [
+        "arn:aws:ec2:*::image/*",
+        "arn:aws:ec2:*::snapshot/*",
+        "arn:aws:ec2:*:YOUR_ACCOUNT_ID:volume/*",
+        "arn:aws:ec2:*:YOUR_ACCOUNT_ID:replace-root-volume-task/*"
+      ]
+    },
+    {
       "Sid": "EC2VolumeAndImageActions",
       "Effect": "Allow",
       "Action": [
@@ -52,8 +65,8 @@
       "Resource": [
         "arn:aws:ec2:*:YOUR_ACCOUNT_ID:volume/*",
         "arn:aws:ec2:*:YOUR_ACCOUNT_ID:instance/*",
-        "arn:aws:ec2:*:YOUR_ACCOUNT_ID:image/*",
-        "arn:aws:ec2:*:YOUR_ACCOUNT_ID:snapshot/*"
+        "arn:aws:ec2:*::image/*",
+        "arn:aws:ec2:*::snapshot/*"
       ]
     },
     {
@@ -62,7 +75,11 @@
       "Action": [
         "ec2:CreateTags"
       ],
-      "Resource": "arn:aws:ec2:*:YOUR_ACCOUNT_ID:*"
+      "Resource": [
+        "arn:aws:ec2:*:YOUR_ACCOUNT_ID:*",
+        "arn:aws:ec2:*::image/*",
+        "arn:aws:ec2:*::snapshot/*"
+      ]
     },
     {
       "Sid": "SSMReadOnly",
@@ -98,7 +115,9 @@
       ],
       "Resource": [
         "arn:aws:ssm:*:YOUR_ACCOUNT_ID:automation-definition/*",
-        "arn:aws:ssm:*::automation-definition/AWS-*"
+        "arn:aws:ssm:*::automation-definition/AWS-*",
+        "arn:aws:ssm:*:YOUR_ACCOUNT_ID:document/Windows-2016-to-2022-PreCheck",
+        "arn:aws:ssm:*:YOUR_ACCOUNT_ID:automation-execution/*"
       ]
     },
     {

@@ -17,7 +17,7 @@ This automation uses SSM to orchestrate an in-place upgrade from Windows Server 
 
 **The automation handles:**
 
-- Pre-flight checks (OS version, SSM agent, disk space, partition layout)
+- Pre-flight checks (OS version, SSM agent, disk space, partition layout, leftover drivers from other hypervisors)
 - AMI backup with configurable retention
 - Automatic disk expansion when the root volume needs more space: extends the partition into unallocated space, or grows the EBS volume and then the partition, as needed
 - Driver updates (ENA, PV, NVMe)
@@ -46,7 +46,7 @@ Source: [Plan your Windows Server upgrade](https://learn.microsoft.com/en-us/win
 - If the instance uses NIC Teaming, disable NIC Teaming before running the upgrade. Re-enable it after upgrade completes ([reference](https://learn.microsoft.com/en-us/windows-server/get-started/install-upgrade-migrate)).
 - Xen PV or ENA networking (SR-IOV/Intel 82599 not supported). If using a 4th-generation instance (m4, c4, etc.) with the Intel 82599 ENI, migrate to a current-generation instance type (m5, c5, or newer) before running this automation.
 - SSM connectivity (internet or SSM VPC endpoints) so the automation can manage the instance
-- Outbound internet (HTTPS 443) to the Microsoft Update Catalog CDN if cumulative-update patching is enabled (the default). The pinned CUs download directly from Microsoft; SSM VPC endpoints alone are not sufficient. If the instance has no internet egress, set `InstallCumulativeUpdates=false` and apply patches with your own process.
+- Outbound internet (HTTPS 443) to the Microsoft Update Catalog CDN if you turn on cumulative-update patching (`InstallCumulativeUpdates=true`). The pinned CUs download directly from Microsoft; SSM VPC endpoints alone are not sufficient. If the instance has no internet egress, set `InstallCumulativeUpdates=false` and apply patches with your own process.
 - No minimum patch level required on the source Windows Server 2016 for media-based in-place upgrade. The automation uses installation media (setup.exe), not Windows Update feature update, so no prerequisite CU is needed on the source OS.
 - C: drive must be the last partition if disk expansion is needed
 - **Tag the target instance `WindowsUpgrade=true`.** The automation role's instance state-change permissions (stop, start, reboot, replace root volume) are scoped by this tag, so an untagged instance is denied those actions. Apply the tag before starting: `aws ec2 create-tags --resources <instance-id> --tags Key=WindowsUpgrade,Value=true --no-cli-pager`
@@ -379,13 +379,22 @@ You can also run it from the web console instead of CloudShell:
 | AutomationAssumeRole | (required) | ARN of WindowsUpgradeAutomationRole |
 | DryRun | false | Run pre-flight checks only, no changes |
 | AutoRollback | false | Automatically rollback if upgrade fails |
+| VerifyIntervalMinutes | 40 | Minutes between upgrade checks after the first 10-minute wait. There are 8 checks, so the default allows about 4 hours 50 minutes for Setup |
 | BackupRetentionDays | 30 | Days to retain backup AMI |
 | WaitForBackupAMI | false | Wait for AMI to complete before proceeding |
-| InstallCumulativeUpdates | true | Install pinned OS + .NET CUs after upgrade; false skips patching |
-| PinnedCumulativeUpdateUrl | Sept 2026 KB5122882 | Catalog .msu URL of the OS cumulative update (SSU+LCU) |
-| PinnedDotNetUpdateUrl | KB5126050 | Catalog .msu URL of the .NET Framework CU |
+| InstallCumulativeUpdates | false | Install the OS and .NET cumulative updates given in the two URL parameters after the upgrade. Requires both URLs. Leave false to patch through your own process afterward |
+| PinnedCumulativeUpdateUrl | "" | Microsoft Update Catalog .msu URL of the Server 2022 OS cumulative update (SSU+LCU, x64). Used only when InstallCumulativeUpdates=true |
+| PinnedDotNetUpdateUrl | "" | Microsoft Update Catalog .msu URL of the Server 2022 .NET Framework cumulative update (x64). Used only when InstallCumulativeUpdates=true |
 | UpgradeInstanceProfileName | WindowsUpgradeInstanceProfile | Instance profile to attach if the instance has no instance profile (removed afterward) |
 | NotificationTopicArn | "" | SNS topic for completion notification |
+
+## Backup Before the Upgrade
+
+Before Setup starts, the automation creates an AMI of the instance with `CreateImage`. EC2 restarts the instance to take the image, so Windows shuts down cleanly and every application stops and writes its data to disk first. The AMI and its snapshots are consistent as of that shutdown. The restart usually takes a few minutes.
+
+This is a restart-based backup, not a [VSS-based application-consistent snapshot](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/application-consistent-snapshots.html). VSS avoids downtime by pausing applications for a few seconds, but the upgrade takes the instance offline anyway, and a clean shutdown doesn't depend on each application having a working VSS writer. If your backup policy requires VSS snapshots, take one with `AWSEC2-VssInstallAndSnapshot` before you start the automation.
+
+With `WaitForBackupAMI = false` (the default), Setup can start while the snapshots are still being copied. They still capture the disk as it was at the restart. If AutoRollback runs, it waits for the snapshot to complete before restoring the root volume. Set `WaitForBackupAMI = true` if you want the AMI available before the upgrade begins.
 
 ## Monitor Progress
 
@@ -429,19 +438,21 @@ Get-SSMAutomationExecutionList -Filter @{
 Uses `$EXEC_ID` from the start command above:
 
 ```bash
-aws ssm get-automation-execution \
+aws ssm describe-automation-step-executions \
     --automation-execution-id "$EXEC_ID" \
-    --query "AutomationExecution.StepExecutions[?StepStatus!='Pending'].{Step:StepName,Status:StepStatus}" \
+    --query "StepExecutions[?StepStatus!='Pending'].{Step:StepName,Status:StepStatus,Start:ExecutionStartTime}" \
     --output table --no-cli-pager
 ```
+
+Use `describe-automation-step-executions` rather than `get-automation-execution`: the step list returned by `get-automation-execution` stops at the first 50 steps, so later steps (verify cycles, cleanup and rollback) are missing from it.
 
 **PowerShell (Windows):**
 
 ```powershell
 $ExecId = 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'
-(Get-SSMAutomationExecution -AutomationExecutionId $ExecId).StepExecutions |
+Get-SSMAutomationStepExecution -AutomationExecutionId $ExecId |
     Where-Object { $_.StepStatus -ne 'Pending' } |
-    Select-Object StepName, StepStatus | Format-Table -AutoSize
+    Select-Object StepName, StepStatus, ExecutionStartTime | Format-Table -AutoSize
 ```
 
 ## Automation Steps
@@ -478,7 +489,7 @@ Runs the PreCheck document and reports results. Never modifies the instance. If 
 12. **AttachUpgradeVolume** — Find available device (/dev/sdf-sdp) and attach volume
 13. **InitializeAndMountVolume** — Bring disk online, assign drive letter, mount ISO if needed, verify setup.exe
 14. **PerformUpgrade** — Run `setup.exe /auto upgrade /dynamicupdate disable`
-15. **Verification chain (InitialUpgradeWait + VerifyUpgrade1–8 + Sleep1–7)** — A multi-step verification chain giving a ~90-minute window. `InitialUpgradeWait` is an `aws:sleep` of PT10M, then up to 8 `VerifyUpgrade` steps each poll for SSM agent online + OS reporting Windows Server 2022 with IMAGE_STATE_COMPLETE, separated by `aws:sleep` PT10M cycles. **Why a chain and not one step:** `aws:executeScript` has a hard 600-second (10-minute) handler cap that overrides the step's `timeoutSeconds`, so a single long-polling step is killed at 10 minutes while the OS is still mid-upgrade. The long waits therefore use `aws:sleep` (no cap) and each verify step stays under its 480s timeout. Cycles 1–7 branch: UPGRADE_COMPLETE → CleanupUpgradeVolume, otherwise → next Sleep. Cycle 8 is the final gate: it raises on still-incomplete → AutoRollback. Any cycle detecting IMAGE_STATE_UNDEPLOYABLE raises immediately → AutoRollback.
+15. **Verification chain (InitialUpgradeWait + VerifyUpgrade1–8 + Sleep1–7)** — `InitialUpgradeWait` is an `aws:sleep` of PT10M, then up to 8 `VerifyUpgrade` steps separated by `aws:sleep` steps of `VerifyIntervalMinutes` (default 40, so about 4 hours 50 minutes in total). Each verify step checks for the SSM agent online and the OS reporting Windows Server 2022 with IMAGE_STATE_COMPLETE. While the instance is offline during Setup's offline phase, a verify step takes a little longer and the chain continues. **Why a chain and not one step:** `aws:executeScript` has a hard 600-second (10-minute) handler cap that overrides the step's `timeoutSeconds`, so a single long-polling step is killed at 10 minutes while the OS is still mid-upgrade. The long waits therefore use `aws:sleep` (no cap) and each verify step stays under its 480s timeout. Cycles 1–7 branch: UPGRADE_COMPLETE → CleanupUpgradeVolume, otherwise → next Sleep. Cycle 8 is the final gate: if Setup is still running (instance offline, SetupHost running, or 2022 not yet complete), the run stops at **StopSetupStillRunning** without rolling back and keeps the upgrade volume and backup AMI so Setup can finish. Rollback (if `AutoRollback=true`) runs only when Setup is confirmed not running in two checks 90 seconds apart, or when any cycle detects IMAGE_STATE_UNDEPLOYABLE.
 16. **CleanupUpgradeVolume** — Detach and delete upgrade EBS volume
 17. **InstallPinnedUpdates** — Download the pinned OS CU (SSU+LCU) and .NET CU .msus, extract, and install via DISM (SSU first, then LCUs); single reboot finalizes all three. Skipped if `InstallCumulativeUpdates=false`. Best-effort: patch failures do not fail the run (the OS upgrade already succeeded).
 18. **VerifyPatchLevel** — Poll until the pinned OS CU shows installed (Get-HotFix); activity-aware: waits only while servicing is active (RebootPending / TiWorker), fails fast if it settles without the CU; also confirms the .NET CU. Best-effort (does not abort the run).
@@ -494,12 +505,10 @@ The 2022 installation media is static: it always lands the OS at the initial 202
 
 Patching is best-effort and non-fatal. The mission is the 2016→2022 upgrade (2016 is approaching end of support); patching is a follow-up. The patch steps (InstallPinnedUpdates → RebootAfterUpdates → WaitForInstanceAfterUpdates → VerifyPatchLevel) run with `onFailure: Continue`, so if the pinned CU can't be downloaded or installed (bad/expired URL, transient error), the automation logs the failure on those steps but still completes successfully. The instance is left upgraded, the recovery partition reclaimed, and the temp profile removed. Apply the CU afterward with your own patch process. Check the InstallPinnedUpdates/VerifyPatchLevel step status to see whether the pinned CU actually applied.
 
-The box lands at the pinned patch level (a known floor), not necessarily absolute-latest. That's intentional: your normal patch process (Patch Manager, WSUS, etc.) brings it fully current afterward. Two supported modes:
+Without patching, the server finishes on the Windows Server 2022 media build (20348.169) and needs the latest cumulative update afterward. Two supported modes:
 
-- **Default** (`InstallCumulativeUpdates=true`): installs the pinned Sept 2026 OS CU (KB5122882) + .NET CU (KB5126050), then your process trues up.
-- **Skip** (`InstallCumulativeUpdates=false`): no patching for a faster run; your process handles everything.
-
-Either way the box is not silently left thinking it's patched at 2022 media-baseline levels.
+- **Default** (`InstallCumulativeUpdates=false`): no patching during the upgrade. Install the latest cumulative update through your normal patch process (Patch Manager, WSUS or Windows Update) once your applications are verified.
+- **Pinned** (`InstallCumulativeUpdates=true` with both URLs set): the automation installs the OS and .NET cumulative updates you pinned, then your process brings the server fully current. This adds download time and a restart to the run.
 
 ### Raising the Floor (Getting a Newer CU URL)
 
@@ -513,7 +522,9 @@ Notes:
 
 ## Rollback
 
-If `AutoRollback=true` and the upgrade fails or a boot loop is detected:
+If the upgrade fails or a boot loop is detected, the **CollectSetupLogs** step first captures Windows Setup's diagnostics into the step output: the OS build, whether Setup is still running, whether a reboot is pending, the last lines of `setuperr.log`, and any hard compatibility blocks from `CompatData*.xml`. This runs before rollback because Replace Root Volume deletes the replaced root volume, along with Setup's logs. If the instance is unreachable, the step times out after a few minutes and the run continues.
+
+If `AutoRollback=true`:
 
 1. The upgrade volume is cleaned up
 2. The backup snapshot is retrieved from the pre-upgrade AMI
@@ -522,6 +533,16 @@ If `AutoRollback=true` and the upgrade fails or a boot loop is detected:
 5. A failure notification is sent (if SNS topic configured)
 
 If `AutoRollback=false` (default), the automation fails and leaves the instance in its current state for investigation.
+
+After a rollback, the run's status also shows `Failed` with `Internal Server Error`. The reason is on the **RollbackSendNotification** step. To read the message from the step that ended any run:
+
+```bash
+aws ssm describe-automation-step-executions --automation-execution-id "$EXEC_ID" \
+    --filters Key=StepStatus,Values=Failed \
+    --query "StepExecutions[].[StepName,FailureMessage]" --output text --no-cli-pager
+```
+
+AutoRollback never runs while Setup is still working. If the final verify step finds Setup still running, the run ends at **StopSetupStillRunning**. The run's own status shows `Failed` with the message `Internal Server Error`; the full message, which names the kept upgrade volume and backup AMI, is on the **StopSetupStillRunning** step (open the step in the console, or see below). If you set `NotificationTopicArn`, the same message is also sent to the SNS topic. Setup carries on and normally completes. Check the OS version on the instance later. Once the server reports Windows Server 2022, detach and delete the upgrade volume, and remove the temporary `WindowsUpgradeInstanceProfile` if the automation attached one.
 
 ### Manual Rollback
 
@@ -591,6 +612,33 @@ If the automation fails for any reason and you need to proceed, AWS documents th
 
 EC2Config is not supported on Windows 2022. Migrate to EC2Launch first: [EC2Launch docs](https://docs.aws.amazon.com/AWSEC2/latest/WindowsGuide/ec2launch.html)
 
+### PreUpgradeCheck fails with unused drivers from another hypervisor
+
+Servers migrated to EC2 from another platform often keep that platform's drivers in the Windows driver store, for example Red Hat VirtIO drivers from KVM (`viostor`, `netkvm`), VMware Tools drivers (`pvscsi`, `vmxnet3`), or Citrix XenServer drivers. They are never used on EC2, but Setup carries them into the new OS, and a storage driver that fails to load at the first boot makes Setup roll back with error `0xC1900101-0x20017`.
+
+**Read the full PreCheck result.** Open the **PreUpgradeCheck** step in the execution (in the console, choose the step and then **Outputs**). The run's own failure message is cut short and usually does not reach the final `ERROR:` line. PreCheck also saves full lists on the instance:
+
+| File | Contents |
+|------|----------|
+| `C:\Temp\upgrade-precheck-drivers.csv` | Every non-AWS driver package, its provider, class, state (in use, removed device only, no device) and whether it is from another hypervisor |
+| `C:\Temp\upgrade-precheck-removed-devices.csv` | Devices Windows still remembers but that are no longer present |
+| `C:\Temp\upgrade-precheck-guest-tools.csv` | Guest tools from another hypervisor or cloud (created only when some are found) |
+
+**Remove only what PreCheck marks as from another hypervisor.** `UNUSED:` lines tagged `other hypervisor` are listed first and are the ones that fail the check. AWS Windows AMIs also include AMD and Intel chipset drivers and Microsoft printer drivers for other instance types; PreCheck reports these as INFO only. Keep them.
+
+Take a backup AMI, back up the driver store, then remove each listed package in PowerShell on the instance and rerun PreCheck:
+
+```powershell
+Export-WindowsDriver -Online -Destination C:\DriverBackup
+pnputil -f -d oem0.inf   # use the oemN.inf names from the PreCheck output
+```
+
+Use the `-f -d` syntax: the `/delete-driver /uninstall` form is not supported by the Windows Server 2016 version of `pnputil`. In testing, removing these packages did not require a restart, but rerun PreCheck: it fails if a restart is pending.
+
+AWS drivers (published by Amazon) never fail the check. PreCheck lists each AWS driver package and whether it is in use for the instance's platform (Nitro uses ENA and NVMe; Xen uses the AWS PV drivers). Packages for the other platform are expected: keep them so the instance can change instance types. If an older version of an AWS driver is still in the driver store alongside a newer one, PreCheck warns about it; removing the older version with `pnputil -f -d` is optional. Hyper-V and Azure Stack HCI drivers are part of Windows itself, so they do not appear in this check and do not need to be removed.
+
+**Guest tools.** PreCheck also warns about tools from another hypervisor or cloud, such as VMware Tools, the QEMU guest agent, cloudbase-init or the Azure VM Agent. Uninstall them through **Programs and Features** before upgrading. One QEMU guest agent uninstall also removes its VSS provider and service. For a service with no uninstaller, such as cloudbase-init, stop and delete the service (`sc.exe delete cloudbase-init`).
+
 ### CheckWindowsBYOL fails
 
 This automation supports license-included Windows only. BYOL (Bring Your Own License) instances use customer-provided media and licensing, which is incompatible with the AWS-provided installation media used by this automation. If you need to upgrade a BYOL instance, use the manual in-place upgrade procedure with your own installation media, or use AWS License Manager to convert from BYOL to license-included before running this automation.
@@ -601,9 +649,47 @@ C3, C4, D2, I2, M4 (except m4.16xlarge), R3 with SR-IOV are not supported. Migra
 
 ### Upgrade times out
 
-Check SSM Automation execution details for step outputs. Check Windows Setup logs on instance: `C:\$WINDOWS.~BT\Sources\Panther\`
+Setup time depends mostly on what is installed on the server. In testing, Setup took 18 to 34 minutes on clean AWS AMIs, but servers with many applications and server roles took up to about 4.5 hours. For those servers, raise `VerifyIntervalMinutes` or run with `AutoRollback=false`: if the run ends while Setup is still working, Setup carries on and normally completes.
+
+Start with the **CollectSetupLogs** step output, which records why Setup stopped even after a rollback:
+
+**AWS CLI (macOS/Linux/CloudShell):**
+
+```bash
+aws ssm describe-automation-step-executions --automation-execution-id "$EXEC_ID" \
+    --filters Key=StepName,Values=CollectSetupLogs \
+    --query "StepExecutions[].Outputs" --output json --no-cli-pager
+```
+
+**PowerShell (Windows):**
+
+```powershell
+Get-SSMAutomationStepExecution -AutomationExecutionId $ExecId |
+    Where-Object { $_.StepName -eq 'CollectSetupLogs' } |
+    Select-Object -ExpandProperty Outputs
+```
+
+If the OS is still Windows Server 2016 and SetupHost is not running, Setup exited early; the `setuperr.log` lines and any hard compatibility blocks show why. If the instance was not rolled back, the full logs remain on the instance in `C:\$WINDOWS.~BT\Sources\Panther\` (or `Sources\Rollback\` if Setup rolled itself back).
 
 If a verify step fails with `TimeoutError: Function handler_with_timeout timed out after 600.0 seconds`, that is the hard `aws:executeScript` handler cap, not the upgrade itself. Do not raise the step's `timeoutSeconds` (it is ignored above 600s). Keep each verify step short (≤480s) and use `aws:sleep` for the long inter-cycle waits; the shipped document already does this across the 8-cycle chain.
+
+### Setup rolls back with 0xC1900101
+
+Setup undid the upgrade itself and the instance restarted into Windows Server 2016. The code after the dash shows the phase (for example `0x20017` means the failure happened during the first boot of the new OS, usually a driver). Run Microsoft's [SetupDiag](https://learn.microsoft.com/en-us/windows/deployment/upgrade/setupdiag) on the instance to read the Setup logs and report the most likely cause:
+
+```powershell
+.\SetupDiag.exe /Output:C:\Temp\SetupDiagResults.log /NoTel
+```
+
+Microsoft's documentation lists Windows 10 and 11, but SetupDiag reads the same Setup logs on Windows Server. The last failure it reports is usually the one that stopped the upgrade. Then rerun PreCheck: leftover drivers or guest tools from another hypervisor are a common cause.
+
+### Typing in PowerShell is broken in a Fleet Manager browser session
+
+In a Fleet Manager Remote Desktop session in the browser, the PSReadLine 2.0.0 module included with Windows Server 2016 can drop or repeat typed characters. Use Command Prompt, or update PSReadLine in an elevated PowerShell window and open a new one:
+
+```powershell
+Install-Module PSReadLine -MinimumVersion 2.2.2 -Force -SkipPublisherCheck
+```
 
 ### PreCheck or verify sub-automation times out on t2 instances
 
@@ -634,3 +720,5 @@ C: must be the last partition on the disk to auto-expand. MBR disks cannot excee
 | t2.large | Xen | ~29 min | ~64 min |
 
 Total time includes pre-upgrade steps (backup AMI, reboot, disk expansion, driver updates) and post-upgrade Windows Updates. Actual times vary depending on Windows Update availability.
+
+These times are for clean AWS AMIs. Servers with many installed applications and server roles take much longer: Setup alone took about 3 to 4.5 hours on such servers. Allow at least 5 hours, and see [Upgrade times out](#upgrade-times-out).
