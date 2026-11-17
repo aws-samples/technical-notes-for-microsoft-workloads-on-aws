@@ -63,6 +63,27 @@
                   }
                 },
                 {
+                  "Sid": "EC2ReplaceRootVolumeResources",
+                  "Effect": "Allow",
+                  "Action": [
+                    "ec2:CreateReplaceRootVolumeTask"
+                  ],
+                  "Resource": [
+                    {
+                      "Fn::Sub": "arn:aws:ec2:*::image/*"
+                    },
+                    {
+                      "Fn::Sub": "arn:aws:ec2:*::snapshot/*"
+                    },
+                    {
+                      "Fn::Sub": "arn:aws:ec2:*:${AWS::AccountId}:volume/*"
+                    },
+                    {
+                      "Fn::Sub": "arn:aws:ec2:*:${AWS::AccountId}:replace-root-volume-task/*"
+                    }
+                  ]
+                },
+                {
                   "Sid": "EC2VolumeAndImageActions",
                   "Effect": "Allow",
                   "Action": [
@@ -82,10 +103,10 @@
                       "Fn::Sub": "arn:aws:ec2:*:${AWS::AccountId}:instance/*"
                     },
                     {
-                      "Fn::Sub": "arn:aws:ec2:*:${AWS::AccountId}:image/*"
+                      "Fn::Sub": "arn:aws:ec2:*::image/*"
                     },
                     {
-                      "Fn::Sub": "arn:aws:ec2:*:${AWS::AccountId}:snapshot/*"
+                      "Fn::Sub": "arn:aws:ec2:*::snapshot/*"
                     }
                   ]
                 },
@@ -95,9 +116,17 @@
                   "Action": [
                     "ec2:CreateTags"
                   ],
-                  "Resource": {
-                    "Fn::Sub": "arn:aws:ec2:*:${AWS::AccountId}:*"
-                  }
+                  "Resource": [
+                    {
+                      "Fn::Sub": "arn:aws:ec2:*:${AWS::AccountId}:*"
+                    },
+                    {
+                      "Fn::Sub": "arn:aws:ec2:*::image/*"
+                    },
+                    {
+                      "Fn::Sub": "arn:aws:ec2:*::snapshot/*"
+                    }
+                  ]
                 },
                 {
                   "Sid": "SSMReadOnly",
@@ -143,6 +172,12 @@
                     },
                     {
                       "Fn::Sub": "arn:aws:ssm:*::automation-definition/AWS-*"
+                    },
+                    {
+                      "Fn::Sub": "arn:aws:ssm:*:${AWS::AccountId}:document/Windows-2016-to-2022-PreCheck"
+                    },
+                    {
+                      "Fn::Sub": "arn:aws:ssm:*:${AWS::AccountId}:automation-execution/*"
                     }
                   ]
                 },
